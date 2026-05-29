@@ -1,14 +1,14 @@
 const express = require('express');
 const { getJobById, getCandidatesByJob, upsertScore, updateRanks } = require('../db/queries');
-const { scoreResume, scoreResumeVision } = require('../services/aiScorer');
+const { scoreResume } = require('../services/aiScorer');
 
 const router = express.Router();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ─── POST /api/analyze/:jobId ─────────────────────────────────────────────────
-// Triggers AI scoring pipeline for all candidates in a job session.
-// Processes candidates SEQUENTIALLY (1 at a time) to respect API rate limits.
+// Triggers AI scoring for all candidates in a job session.
+// Processes sequentially (one at a time) with a small delay to stay within rate limits.
 router.post('/:jobId', async (req, res) => {
   const { jobId } = req.params;
 
@@ -23,30 +23,26 @@ router.post('/:jobId', async (req, res) => {
       return res.status(400).json({ error: 'No candidates found for this job.' });
     }
 
-    console.log(`[Analyze] Starting sequential scoring of ${candidates.length} candidates for: "${job.title}"`);
+    console.log(`[Analyze] Scoring ${candidates.length} candidate(s) for: "${job.title}"`);
 
     const results = [];
     const errors  = [];
 
-    // Process ONE at a time to avoid hitting Gemini API rate limits
     for (let i = 0; i < candidates.length; i++) {
       const candidate = candidates[i];
       console.log(`[Analyze] (${i + 1}/${candidates.length}) Scoring: ${candidate.name}`);
 
       try {
-        const hasText = candidate.raw_text && candidate.raw_text.trim().length >= 80;
-        let scoreData;
-
-        if (hasText) {
-          // Normal text-based PDF/DOCX/TXT → text scoring
-          scoreData = await scoreResume(candidate.raw_text, job.description);
-        } else {
-          // Image-based PDF (JPG→PDF, scanned, etc.) → Vision OCR+scoring in 1 call
-          console.log(`[Analyze] Candidate "${candidate.name}" has no text — using Vision OCR scoring.`);
-          scoreData = await scoreResumeVision(candidate.file_path, job.description, 'application/pdf');
+        if (!candidate.raw_text || candidate.raw_text.trim().length < 30) {
+          throw new Error(
+            'No readable text found in this resume. ' +
+            'It may be a scanned or image-based PDF. Please upload a text-based PDF or DOCX.'
+          );
         }
 
-        // Use AI-extracted name if heuristic gave us "Unknown Candidate"
+        const scoreData = await scoreResume(candidate.raw_text, job.description);
+
+        // Use AI-extracted name if heuristic returned "Unknown Candidate"
         const resolvedName =
           candidate.name === 'Unknown Candidate' && scoreData.candidateName !== 'Unknown Candidate'
             ? scoreData.candidateName
@@ -65,26 +61,31 @@ router.post('/:jobId', async (req, res) => {
           summary:         scoreData.summary,
         });
 
-        results.push({
-          candidateId: candidate.id,
-          name:        resolvedName,
-          totalScore:  scoreData.totalScore,
-        });
-
+        results.push({ candidateId: candidate.id, name: resolvedName, totalScore: scoreData.totalScore });
       } catch (err) {
         const errMsg = err.message || 'Scoring failed';
-        console.error(`[Analyze] Failed to score "${candidate.name}": ${errMsg}`);
+        console.error(`[Analyze] Failed "${candidate.name}": ${errMsg}`);
         errors.push({ candidateId: candidate.id, name: candidate.name, error: errMsg });
       }
 
-      // Wait 2 seconds between each resume to avoid hitting the rate limit
+      // Small delay between requests to stay within rate limits
       if (i < candidates.length - 1) {
-        await sleep(2000);
+        await sleep(1000);
       }
     }
 
-    // Assign ranks ordered by total_score DESC
-    await updateRanks(jobId);
+    // Rank all successfully scored candidates
+    if (results.length > 0) {
+      await updateRanks(jobId);
+    }
+
+    if (results.length === 0) {
+      return res.status(400).json({
+        error: 'Analysis failed for all candidates.',
+        details: errors.map(e => `${e.name}: ${e.error}`).join(' | '),
+        errors,
+      });
+    }
 
     res.json({
       jobId,
@@ -94,7 +95,7 @@ router.post('/:jobId', async (req, res) => {
       failed:          errors.length,
       results,
       errors:          errors.length > 0 ? errors : undefined,
-      message:         `Scoring complete. ${results.length} of ${candidates.length} candidates analyzed successfully.`,
+      message:         `${results.length} of ${candidates.length} candidates analyzed successfully.`,
     });
 
   } catch (err) {

@@ -21,7 +21,7 @@ interface Candidate {
 interface Results {
   jobTitle: string;
   jobId: string;
-  stats: { totalCandidates: number; scoredCandidates: number; averageScore: number; topScore: number; qualifiedCandidates: number; };
+  stats: { totalCandidates: number; averageScore: number; topScore: number; qualifiedCandidates: number; };
   candidates: Candidate[];
 }
 
@@ -259,7 +259,8 @@ export default function Home() {
                     }}
                   />
                 </p>
-                <p style={{ marginTop: '8px', fontSize: '0.8rem' }}>Supports PDF, DOCX, TXT · Max 10MB each</p>
+                <p style={{ marginTop: '8px', fontSize: '0.8rem' }}>Supports text-based PDF, DOCX, TXT · Max 10MB each</p>
+                <p style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--warning)' }}>⚠️ Scanned or image-based PDFs are not supported</p>
               </div>
 
               {files.length > 0 && (
@@ -291,11 +292,11 @@ export default function Home() {
               <div className="stats-grid">
                 <div className="stat-card">
                   <div className="stat-value">{results.stats.totalCandidates}</div>
-                  <div className="stat-label">Total Uploaded</div>
+                  <div className="stat-label">Total Candidates</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-value">{results.stats.scoredCandidates ?? results.stats.totalCandidates}</div>
-                  <div className="stat-label">AI Scored</div>
+                  <div className="stat-value">{results.stats.averageScore}</div>
+                  <div className="stat-label">Avg Match Score</div>
                 </div>
                 <div className="stat-card">
                   <div className="stat-value">{results.stats.topScore}</div>
@@ -330,42 +331,18 @@ export default function Home() {
 
             <div className="candidates-grid">
               {results.candidates.map((candidate, idx) => {
-                const isFailed = (candidate as any).status === 'failed';
-                // Only ranked scored candidates get medals
-                const scoredIdx = results.candidates.filter(c => (c as any).status !== 'failed').indexOf(candidate);
                 let badgeClass = 'default';
-                if (!isFailed && scoredIdx === 0) badgeClass = 'gold';
-                else if (!isFailed && scoredIdx === 1) badgeClass = 'silver';
-                else if (!isFailed && scoredIdx === 2) badgeClass = 'bronze';
+                if (idx === 0) badgeClass = 'gold';
+                else if (idx === 1) badgeClass = 'silver';
+                else if (idx === 2) badgeClass = 'bronze';
 
                 const scoreColor = candidate.total_score >= 80 ? '#34c759' : candidate.total_score >= 60 ? '#ff9500' : '#ff3b30';
-
-                if (isFailed) {
-                  return (
-                    <div key={candidate.id} className="candidate-card candidate-card-failed" style={{ animationDelay: `${idx * 0.07}s` }}>
-                      <div className="candidate-card-header">
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                          <div className="rank-badge default">—</div>
-                          <div>
-                            <div className="candidate-name">{candidate.name || 'Unknown Candidate'}</div>
-                            <div className="candidate-file">📄 {candidate.file_name}</div>
-                          </div>
-                        </div>
-                        <div className="failed-badge">⚠ Parse Failed</div>
-                      </div>
-                      <p className="summary-text" style={{ marginTop: '12px' }}>
-                        Could not extract text from this PDF. It may be image-based or password-protected.
-                        Try converting it to a text-based PDF or DOCX and re-uploading.
-                      </p>
-                    </div>
-                  );
-                }
 
                 return (
                   <div key={candidate.id} className="candidate-card" style={{ animationDelay: `${idx * 0.07}s` }}>
                     <div className="candidate-card-header">
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                        <div className={`rank-badge ${badgeClass}`}>#{candidate.rank || scoredIdx + 1}</div>
+                        <div className={`rank-badge ${badgeClass}`}>#{candidate.rank || idx + 1}</div>
                         <div>
                           <div className="candidate-name">{candidate.name}</div>
                           <div className="candidate-file">📄 {candidate.file_name}</div>
@@ -392,10 +369,13 @@ export default function Home() {
                         { label: 'Education',  value: candidate.education_score,   color: '#06b6d4' },
                         { label: 'Keywords',   value: candidate.keyword_score,     color: '#10b981' },
                       ].map(({ label, value, color }) => (
-                        <div key={`${candidate.id}-${label}`} className="score-bar-row">
+                        <div key={label} className="score-bar-row">
                           <span className="score-bar-label">{label}</span>
                           <div className="score-bar-track">
-                            <div className="score-bar-fill" style={{ width: `${(value / 25) * 100}%`, background: color }} />
+                            <div
+                              className="score-bar-fill"
+                              style={{ width: `${(value / 25) * 100}%`, background: color }}
+                            />
                           </div>
                           <span className="score-bar-val">{value}<span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/25</span></span>
                         </div>
@@ -407,8 +387,8 @@ export default function Home() {
                       <div className="skills-section">
                         <div className="skills-label">✅ Matched Skills</div>
                         <div className="skills-chips">
-                          {candidate.matched_skills.map((skill: string) => (
-                            <span key={`match-${candidate.id}-${skill}`} className="chip chip-matched">{skill}</span>
+                          {candidate.matched_skills.map((skill, sIdx) => (
+                            <span key={sIdx} className="chip chip-matched">{skill}</span>
                           ))}
                         </div>
                       </div>
@@ -419,8 +399,8 @@ export default function Home() {
                       <div className="skills-section">
                         <div className="skills-label">⚠️ Missing / Gaps</div>
                         <div className="skills-chips">
-                          {candidate.missing_skills.map((skill: string) => (
-                            <span key={`miss-${candidate.id}-${skill}`} className="chip chip-missing">{skill}</span>
+                          {candidate.missing_skills.map((skill, sIdx) => (
+                            <span key={sIdx} className="chip chip-missing">{skill}</span>
                           ))}
                         </div>
                       </div>
@@ -448,8 +428,7 @@ export default function Home() {
               <div className="progress-bar-fill" style={{ width: `${uploadProgress}%` }}></div>
             </div>
             <p style={{ marginTop: '12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Analyzing {files.length} resume{files.length > 1 ? 's' : ''} one by one to stay within API limits…
-              <br />Est. wait: ~{Math.ceil(files.length * 8)} seconds
+              This may take 10–30 seconds per resume…
             </p>
           </div>
         </div>

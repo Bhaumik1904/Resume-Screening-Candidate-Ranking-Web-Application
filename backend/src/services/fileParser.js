@@ -3,75 +3,63 @@ const path = require('path');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 
-// Minimum characters before we consider a PDF as image-based (no text layer)
+// Minimum chars to consider a PDF as text-based
 const MIN_TEXT_LENGTH = 80;
 
 /**
- * Extract raw text from a resume file (PDF, DOC, DOCX, TXT).
- * For image-based PDFs, returns an empty string — the analyze route will
- * handle OCR+scoring in a single combined Gemini Vision call instead.
+ * Extract raw text from a resume file (PDF, DOCX, DOC, TXT).
+ * NOTE: Image-based PDFs (scanned / JPG-to-PDF) are NOT supported.
+ *       Please upload text-based PDFs or DOCX files.
  * @param {string} filePath - Absolute path to the file
  * @param {string} mimeType - MIME type of the file
- * @returns {Promise<string>} Extracted text content (empty string for image PDFs)
+ * @returns {Promise<string>} Extracted text content
  */
 const extractText = async (filePath, mimeType) => {
   const ext = path.extname(filePath).toLowerCase();
 
-  try {
-    let rawText = '';
+  let rawText = '';
 
-    if (ext === '.pdf' || mimeType === 'application/pdf') {
-      rawText = await parsePDF(filePath);
-      // If too little text, signal to the analyzer to use Vision OCR instead
-      if (rawText.length < MIN_TEXT_LENGTH) {
-        console.log(`[FileParser] Image-based PDF detected (${rawText.length} chars). Vision OCR will handle it during analysis.`);
-        return ''; // Empty string triggers vision path in analyze route
-      }
-    } else if (
-      ext === '.docx' ||
-      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      ext === '.doc' || mimeType === 'application/msword'
-    ) {
-      rawText = await parseDOCX(filePath);
-    } else if (ext === '.txt' || mimeType === 'text/plain') {
-      rawText = fs.readFileSync(filePath, 'utf-8');
-    } else {
-      throw new Error(`Unsupported file type: ${ext}`);
+  if (ext === '.pdf' || mimeType === 'application/pdf') {
+    rawText = await parsePDF(filePath);
+    if (rawText.length < MIN_TEXT_LENGTH) {
+      throw new Error(
+        'This PDF appears to be image-based or scanned (no readable text found). ' +
+        'Please upload a text-based PDF or DOCX file instead.'
+      );
     }
-
-    // Normalize whitespace to help AI analysis
-    return rawText.replace(/\s\s+/g, ' ').trim();
-  } catch (err) {
-    console.error(`[FileParser] Failed to parse ${path.basename(filePath)}:`, err.message);
-    throw new Error(err.message || `Could not extract text from file.`);
+  } else if (
+    ext === '.docx' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    ext === '.doc' ||
+    mimeType === 'application/msword'
+  ) {
+    rawText = await parseDOCX(filePath);
+  } else if (ext === '.txt' || mimeType === 'text/plain') {
+    rawText = fs.readFileSync(filePath, 'utf-8');
+  } else {
+    throw new Error(`Unsupported file type: ${ext}. Please upload PDF, DOCX, or TXT.`);
   }
+
+  if (!rawText || rawText.trim().length < 20) {
+    throw new Error('Could not extract readable text from this file. Please try a different format.');
+  }
+
+  return rawText.replace(/\s\s+/g, ' ').trim();
 };
 
-/**
- * Parse a text-based PDF file using pdf-parse
- */
 const parsePDF = async (filePath) => {
   const dataBuffer = fs.readFileSync(filePath);
   const data = await pdfParse(dataBuffer);
   return (data.text || '').trim();
 };
 
-/**
- * Parse a DOCX (or DOC) file and extract its text using mammoth
- */
 const parseDOCX = async (filePath) => {
   const result = await mammoth.extractRawText({ path: filePath });
-  if (result.messages && result.messages.length > 0) {
-    result.messages.forEach((m) => {
-      if (m.type === 'warning') console.warn(`[FileParser] mammoth warning: ${m.message}`);
-    });
-  }
   return (result.value || '').trim();
 };
 
 /**
- * Try to extract the candidate's name from raw text
- * Uses heuristic: first non-empty line that looks like a name
+ * Heuristically extract candidate name from the first few lines of resume text.
  */
 const extractCandidateName = (rawText) => {
   if (!rawText) return 'Unknown Candidate';
