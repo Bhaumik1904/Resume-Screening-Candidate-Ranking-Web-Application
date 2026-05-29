@@ -448,7 +448,8 @@ export default function Home() {
               <div className="progress-bar-fill" style={{ width: `${uploadProgress}%` }}></div>
             </div>
             <p style={{ marginTop: '12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              This may take 10–30 seconds per resume…
+              Scoring one candidate at a time to respect API limits.<br />
+              Expect ~10s per resume — please don&apos;t close this tab.
             </p>
           </div>
         </div>

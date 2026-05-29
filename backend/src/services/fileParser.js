@@ -61,35 +61,48 @@ const parsePDF = async (filePath) => {
 
 /**
  * Use Gemini Vision to extract text from an image-based (scanned) PDF
- * Gemini 2.5 Flash can read PDFs natively as inline data
+ * Gemini 2.0 Flash can read PDFs natively as inline data
  */
-const extractTextFromImagePDF = async (filePath) => {
+const extractTextFromImagePDF = async (filePath, retries = 2) => {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not set — cannot perform Vision OCR on image-based PDF.');
   }
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const pdfBuffer = fs.readFileSync(filePath);
   const base64Data = pdfBuffer.toString('base64');
 
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        data: base64Data,
-        mimeType: 'application/pdf',
-      },
-    },
-    `Extract ALL text from this resume PDF exactly as it appears. 
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: 'application/pdf',
+          },
+        },
+        `Extract ALL text from this resume PDF exactly as it appears. 
 Include: candidate name, contact info, work experience with dates and descriptions, 
 education, skills, certifications, projects, and any other content. 
 Output plain text only — no markdown formatting, no bullet symbols, just the raw text content.`,
-  ]);
+      ]);
 
-  const text = result.response.text().trim();
-  console.log(`[FileParser] Gemini Vision OCR extracted ${text.length} characters from image-based PDF.`);
-  return text;
+      const text = result.response.text().trim();
+      console.log(`[FileParser] Gemini Vision OCR extracted ${text.length} characters from image-based PDF.`);
+      return text;
+    } catch (err) {
+      const isRetryable = err.message?.includes('503') || err.message?.includes('429') || err.message?.includes('Too Many Requests') || err.message?.includes('Service Unavailable');
+      if (isRetryable && attempt < retries) {
+        const delay = (attempt + 1) * 8000; // 8s, then 16s
+        console.warn(`[FileParser] Gemini Vision rate limited, retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
 };
 
 /**
