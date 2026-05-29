@@ -29,6 +29,7 @@ let toastCounter = 0;
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'text' | 'url' | 'file'>('text');
+  const [jobTitle, setJobTitle] = useState('');
   const [jdText, setJdText] = useState('');
   const [jdUrl, setJdUrl] = useState('');
   const [jdFile, setJdFile] = useState<File | null>(null);
@@ -142,6 +143,7 @@ export default function Home() {
 
     const formData = new FormData();
     formData.append('jobDescription', jd);
+    if (jobTitle.trim()) formData.append('jobTitle', jobTitle.trim());
     files.forEach(file => formData.append('resumes', file));
 
     try {
@@ -187,6 +189,7 @@ export default function Home() {
     setResults(null);
     setFiles([]);
     setJobId(null);
+    setJobTitle('');
     setJdText('');
     setJdUrl('');
     setJdFile(null);
@@ -252,6 +255,16 @@ export default function Home() {
             {/* Job Description Card */}
             <div className="card">
               <div className="card-label"><span>📝</span> Job Description</div>
+
+              {/* Job Title Input */}
+              <input
+                type="text"
+                className="jd-input"
+                placeholder="Job title (e.g. Senior Frontend Engineer, Marketing Executive)"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                style={{ marginBottom: '14px' }}
+              />
 
               <div className="jd-tabs">
                 <button className={`jd-tab ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>Paste Text</button>
