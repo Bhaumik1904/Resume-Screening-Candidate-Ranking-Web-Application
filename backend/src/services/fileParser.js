@@ -2,18 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-require('dotenv').config();
 
 // Minimum characters before we consider a PDF as image-based (no text layer)
 const MIN_TEXT_LENGTH = 80;
 
 /**
- * Extract raw text from a resume file (PDF, DOC, DOCX, TXT)
- * For image-based PDFs (JPG/PNG converted to PDF), falls back to Gemini Vision OCR.
+ * Extract raw text from a resume file (PDF, DOC, DOCX, TXT).
+ * For image-based PDFs, returns an empty string — the analyze route will
+ * handle OCR+scoring in a single combined Gemini Vision call instead.
  * @param {string} filePath - Absolute path to the file
  * @param {string} mimeType - MIME type of the file
- * @returns {Promise<string>} Extracted text content
+ * @returns {Promise<string>} Extracted text content (empty string for image PDFs)
  */
 const extractText = async (filePath, mimeType) => {
   const ext = path.extname(filePath).toLowerCase();
@@ -23,11 +22,10 @@ const extractText = async (filePath, mimeType) => {
 
     if (ext === '.pdf' || mimeType === 'application/pdf') {
       rawText = await parsePDF(filePath);
-
-      // If almost no text was extracted, this is likely an image-based PDF
+      // If too little text, signal to the analyzer to use Vision OCR instead
       if (rawText.length < MIN_TEXT_LENGTH) {
-        console.log(`[FileParser] PDF appears to be image-based (extracted ${rawText.length} chars). Attempting Gemini Vision OCR...`);
-        rawText = await ocrWithGemini(filePath, 'application/pdf');
+        console.log(`[FileParser] Image-based PDF detected (${rawText.length} chars). Vision OCR will handle it during analysis.`);
+        return ''; // Empty string triggers vision path in analyze route
       }
     } else if (
       ext === '.docx' ||
@@ -39,10 +37,6 @@ const extractText = async (filePath, mimeType) => {
       rawText = fs.readFileSync(filePath, 'utf-8');
     } else {
       throw new Error(`Unsupported file type: ${ext}`);
-    }
-
-    if (!rawText || rawText.trim().length < 20) {
-      throw new Error('Could not extract readable text from this file. Please upload a text-based PDF or DOCX instead of an image.');
     }
 
     // Normalize whitespace to help AI analysis
@@ -76,42 +70,6 @@ const parseDOCX = async (filePath) => {
 };
 
 /**
- * OCR fallback using Gemini Vision for image-based PDFs (JPG/PNG converted to PDF)
- * Sends the file as base64 to Gemini and asks it to extract all resume text.
- * @param {string} filePath - Absolute path to the file
- * @param {string} mimeType - MIME type to send to Gemini
- * @returns {Promise<string>} Extracted text from the image
- */
-const ocrWithGemini = async (filePath, mimeType) => {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not set. Cannot perform OCR on image-based PDF.');
-  }
-
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-  const fileBuffer = fs.readFileSync(filePath);
-  const base64Data = fileBuffer.toString('base64');
-
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        data: base64Data,
-        mimeType: mimeType,
-      },
-    },
-    `This is a resume document. Please extract ALL text from it exactly as it appears.
-Include: candidate name, contact info, all job titles, company names, dates, skills, education, certifications, and any other text.
-Format it clearly with line breaks between sections.
-Output ONLY the extracted text — no commentary, no formatting instructions, just the raw resume content.`,
-  ]);
-
-  const extracted = result.response.text().trim();
-  console.log(`[FileParser] Gemini Vision OCR extracted ${extracted.length} characters.`);
-  return extracted;
-};
-
-/**
  * Try to extract the candidate's name from raw text
  * Uses heuristic: first non-empty line that looks like a name
  */
@@ -124,7 +82,6 @@ const extractCandidateName = (rawText) => {
     .filter((l) => l.length > 0);
 
   for (const line of lines.slice(0, 8)) {
-    // A name line: 2-4 words, mostly alpha characters, no special chars
     const words = line.split(/\s+/);
     if (
       words.length >= 2 &&
