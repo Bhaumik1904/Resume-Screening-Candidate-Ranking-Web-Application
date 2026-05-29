@@ -19,8 +19,8 @@ router.get('/:jobId', async (req, res) => {
 
     const results = await getResultsByJob(jobId);
 
-    const scored  = results.filter(r => r.status === 'scored');
-    const scores  = scored.map((r) => r.total_score);
+    // Compute summary statistics
+    const scores = results.map((r) => r.total_score);
     const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
     const topScore = scores.length ? Math.max(...scores) : 0;
     const qualified = scores.filter((s) => s >= 70).length;
@@ -32,7 +32,6 @@ router.get('/:jobId', async (req, res) => {
       createdAt: job.created_at,
       stats: {
         totalCandidates: results.length,
-        scoredCandidates: scored.length,
         averageScore: avgScore,
         topScore,
         qualifiedCandidates: qualified,
@@ -84,7 +83,7 @@ router.get('/:jobId/export', async (req, res) => {
 // Serve the raw resume file for preview
 router.get('/:jobId/resume/:fileName', (req, res) => {
   const { fileName } = req.params;
-  const uploadsDir = path.join(__dirname, '../../uploads');
+  const uploadsDir = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '../../uploads');
   const filePath = path.join(uploadsDir, fileName);
 
   // Security: ensure the resolved path stays within uploads dir

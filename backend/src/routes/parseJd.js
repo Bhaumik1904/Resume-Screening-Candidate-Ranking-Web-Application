@@ -7,12 +7,12 @@ const { extractText } = require('../services/fileParser');
 
 const router = express.Router();
 
-// Temp storage for JD files — cleaned up after parsing
-const TMP_DIR = path.join(__dirname, '../../uploads/tmp');
-if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
+// ─── Multer Storage Config ─────────────────────────────────────────────────────
+const UPLOADS_DIR = process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, '../../uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, TMP_DIR),
+  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename: (_req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
 });
 
