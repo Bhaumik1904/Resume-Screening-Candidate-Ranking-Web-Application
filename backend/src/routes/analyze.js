@@ -21,10 +21,10 @@ const scoreCandidateWithRetry = async (candidate, jobDescription, retries = 2) =
       const isRateLimit   = err.message?.includes('429') || err.message?.includes('Too Many Requests');
       const isUnavailable = err.message?.includes('503') || err.message?.includes('Service Unavailable');
 
-      // Honour Gemini's suggested retry delay if present, otherwise back off 12s / 24s
-      let retryMs = (attempt + 1) * 12000;
+      // Honour Gemini's suggested retry delay, but cap at 15s so we don't stall
+      let retryMs = (attempt + 1) * 8000; // 8s then 16s default
       const retryMatch = err.message?.match(/retry in (\d+(?:\.\d+)?)s/);
-      if (retryMatch) retryMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
+      if (retryMatch) retryMs = Math.min(Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1000, 15000);
 
       if ((isRateLimit || isUnavailable) && attempt < retries) {
         console.warn(`[Analyze] Rate limited on "${candidate.name}". Waiting ${retryMs / 1000}s before retry...`);
@@ -119,10 +119,9 @@ router.post('/:jobId', async (req, res) => {
         errors.push({ candidateId: candidate.id, name: candidate.name, error: errMsg });
       }
 
-      // 6s cooldown between candidates to respect 5 RPM rate limit
+      // 4s cooldown between candidates — safe for 15 RPM (gemini-2.0-flash)
       if (i < candidates.length - 1) {
-        console.log('[Analyze] Waiting 6s before next candidate...');
-        await sleep(6000);
+        await sleep(4000);
       }
     }
 

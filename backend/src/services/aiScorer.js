@@ -50,7 +50,7 @@ const scoreResume = async (resumeText, jobDescription) => {
     throw new Error('GEMINI_API_KEY is not configured. Please set it in your .env file.');
   }
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const prompt = `${SCORING_PROMPT}
 
