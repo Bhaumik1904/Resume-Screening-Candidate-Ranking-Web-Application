@@ -98,23 +98,25 @@ const getResultsByJob = async (jobId) => {
        c.file_name,
        c.file_path,
        c.file_type,
-       s.total_score,
-       s.skills_score,
-       s.experience_score,
-       s.education_score,
-       s.keyword_score,
-       s.matched_skills,
-       s.missing_skills,
+       COALESCE(s.total_score, 0)      AS total_score,
+       COALESCE(s.skills_score, 0)     AS skills_score,
+       COALESCE(s.experience_score, 0) AS experience_score,
+       COALESCE(s.education_score, 0)  AS education_score,
+       COALESCE(s.keyword_score, 0)    AS keyword_score,
+       COALESCE(s.matched_skills, '{}') AS matched_skills,
+       COALESCE(s.missing_skills, '{}') AS missing_skills,
        s.summary,
-       s.rank
+       s.rank,
+       CASE WHEN s.id IS NULL THEN 'failed' ELSE 'scored' END AS status
      FROM candidates c
-     JOIN scores s ON s.candidate_id = c.id
+     LEFT JOIN scores s ON s.candidate_id = c.id
      WHERE c.job_id = $1
-     ORDER BY s.rank ASC`,
+     ORDER BY COALESCE(s.rank, 9999) ASC, c.created_at ASC`,
     [jobId]
   );
   return res.rows;
 };
+
 
 module.exports = {
   createJob,

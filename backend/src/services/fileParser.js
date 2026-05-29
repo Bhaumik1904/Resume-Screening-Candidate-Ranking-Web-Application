@@ -2,20 +2,30 @@ const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+require('dotenv').config();
+
+// Minimum characters to consider a PDF "text-based" vs image-based
+const MIN_TEXT_LENGTH = 100;
 
 /**
- * Extract raw text from a resume file (PDF, DOC, DOCX)
- * @param {string} filePath - Absolute path to the file
- * @param {string} mimeType - MIME type of the file
- * @returns {Promise<string>} Extracted text content
+ * Extract raw text from a resume file (PDF, DOC, DOCX, TXT)
+ * For image-based PDFs (scanned/rendered), falls back to Gemini Vision OCR.
  */
 const extractText = async (filePath, mimeType) => {
   const ext = path.extname(filePath).toLowerCase();
 
   try {
     let rawText = '';
+
     if (ext === '.pdf' || mimeType === 'application/pdf') {
       rawText = await parsePDF(filePath);
+
+      // If pdf-parse returned almost nothing, the PDF is image-based — use Gemini Vision
+      if (rawText.trim().length < MIN_TEXT_LENGTH) {
+        console.log(`[FileParser] PDF has minimal text (${rawText.trim().length} chars). Switching to Gemini Vision OCR...`);
+        rawText = await extractTextFromImagePDF(filePath);
+      }
     } else if (
       ext === '.docx' ||
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -28,21 +38,58 @@ const extractText = async (filePath, mimeType) => {
       throw new Error(`Unsupported file type: ${ext}`);
     }
 
-    // Normalize whitespace (remove multiple empty lines and spaces) to help AI analysis
+    if (!rawText || rawText.trim().length < 30) {
+      throw new Error('Could not extract readable text from this file. Please ensure the PDF is not password-protected or corrupted.');
+    }
+
+    // Normalize whitespace
     return rawText.replace(/\s\s+/g, ' ').trim();
   } catch (err) {
-    console.error(`[FileParser] Failed to parse ${filePath}:`, err.message);
-    throw new Error(`Could not extract text from file: ${err.message}`);
+    console.error(`[FileParser] Failed to parse ${path.basename(filePath)}:`, err.message);
+    throw new Error(`Could not extract text from "${path.basename(filePath)}": ${err.message}`);
   }
 };
 
 /**
- * Parse a PDF file and extract its text
+ * Parse a text-based PDF file and extract its text
  */
 const parsePDF = async (filePath) => {
   const dataBuffer = fs.readFileSync(filePath);
   const data = await pdfParse(dataBuffer);
   return (data.text || '').trim();
+};
+
+/**
+ * Use Gemini Vision to extract text from an image-based (scanned) PDF
+ * Gemini 2.5 Flash can read PDFs natively as inline data
+ */
+const extractTextFromImagePDF = async (filePath) => {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not set — cannot perform Vision OCR on image-based PDF.');
+  }
+
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+  const pdfBuffer = fs.readFileSync(filePath);
+  const base64Data = pdfBuffer.toString('base64');
+
+  const result = await model.generateContent([
+    {
+      inlineData: {
+        data: base64Data,
+        mimeType: 'application/pdf',
+      },
+    },
+    `Extract ALL text from this resume PDF exactly as it appears. 
+Include: candidate name, contact info, work experience with dates and descriptions, 
+education, skills, certifications, projects, and any other content. 
+Output plain text only — no markdown formatting, no bullet symbols, just the raw text content.`,
+  ]);
+
+  const text = result.response.text().trim();
+  console.log(`[FileParser] Gemini Vision OCR extracted ${text.length} characters from image-based PDF.`);
+  return text;
 };
 
 /**
@@ -70,8 +117,7 @@ const extractCandidateName = (rawText) => {
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
-  for (const line of lines.slice(0, 8)) {
-    // A name line: 2-4 words, mostly alpha characters, no special chars
+  for (const line of lines.slice(0, 10)) {
     const words = line.split(/\s+/);
     if (
       words.length >= 2 &&

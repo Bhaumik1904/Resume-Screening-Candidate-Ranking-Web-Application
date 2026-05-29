@@ -591,6 +591,24 @@ p  { color: var(--text-secondary); }
 
 .candidate-card:hover::before { opacity: 1; }
 
+.candidate-card-failed {
+  border-color: rgba(255, 149, 0, 0.3);
+  background: rgba(255, 149, 0, 0.03);
+  opacity: 0.85;
+}
+
+.failed-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid rgba(255, 149, 0, 0.3);
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .candidate-card-header {
   display: flex;
   align-items: flex-start;

@@ -21,7 +21,7 @@ interface Candidate {
 interface Results {
   jobTitle: string;
   jobId: string;
-  stats: { totalCandidates: number; averageScore: number; topScore: number; qualifiedCandidates: number; };
+  stats: { totalCandidates: number; scoredCandidates: number; averageScore: number; topScore: number; qualifiedCandidates: number; };
   candidates: Candidate[];
 }
 
@@ -291,11 +291,11 @@ export default function Home() {
               <div className="stats-grid">
                 <div className="stat-card">
                   <div className="stat-value">{results.stats.totalCandidates}</div>
-                  <div className="stat-label">Total Candidates</div>
+                  <div className="stat-label">Total Uploaded</div>
                 </div>
                 <div className="stat-card">
-                  <div className="stat-value">{results.stats.averageScore}</div>
-                  <div className="stat-label">Avg Match Score</div>
+                  <div className="stat-value">{results.stats.scoredCandidates ?? results.stats.totalCandidates}</div>
+                  <div className="stat-label">AI Scored</div>
                 </div>
                 <div className="stat-card">
                   <div className="stat-value">{results.stats.topScore}</div>
@@ -330,18 +330,42 @@ export default function Home() {
 
             <div className="candidates-grid">
               {results.candidates.map((candidate, idx) => {
+                const isFailed = (candidate as any).status === 'failed';
+                // Only ranked scored candidates get medals
+                const scoredIdx = results.candidates.filter(c => (c as any).status !== 'failed').indexOf(candidate);
                 let badgeClass = 'default';
-                if (idx === 0) badgeClass = 'gold';
-                else if (idx === 1) badgeClass = 'silver';
-                else if (idx === 2) badgeClass = 'bronze';
+                if (!isFailed && scoredIdx === 0) badgeClass = 'gold';
+                else if (!isFailed && scoredIdx === 1) badgeClass = 'silver';
+                else if (!isFailed && scoredIdx === 2) badgeClass = 'bronze';
 
                 const scoreColor = candidate.total_score >= 80 ? '#34c759' : candidate.total_score >= 60 ? '#ff9500' : '#ff3b30';
+
+                if (isFailed) {
+                  return (
+                    <div key={candidate.id} className="candidate-card candidate-card-failed" style={{ animationDelay: `${idx * 0.07}s` }}>
+                      <div className="candidate-card-header">
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                          <div className="rank-badge default">—</div>
+                          <div>
+                            <div className="candidate-name">{candidate.name || 'Unknown Candidate'}</div>
+                            <div className="candidate-file">📄 {candidate.file_name}</div>
+                          </div>
+                        </div>
+                        <div className="failed-badge">⚠ Parse Failed</div>
+                      </div>
+                      <p className="summary-text" style={{ marginTop: '12px' }}>
+                        Could not extract text from this PDF. It may be image-based or password-protected.
+                        Try converting it to a text-based PDF or DOCX and re-uploading.
+                      </p>
+                    </div>
+                  );
+                }
 
                 return (
                   <div key={candidate.id} className="candidate-card" style={{ animationDelay: `${idx * 0.07}s` }}>
                     <div className="candidate-card-header">
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                        <div className={`rank-badge ${badgeClass}`}>#{candidate.rank || idx + 1}</div>
+                        <div className={`rank-badge ${badgeClass}`}>#{candidate.rank || scoredIdx + 1}</div>
                         <div>
                           <div className="candidate-name">{candidate.name}</div>
                           <div className="candidate-file">📄 {candidate.file_name}</div>
@@ -368,13 +392,10 @@ export default function Home() {
                         { label: 'Education',  value: candidate.education_score,   color: '#06b6d4' },
                         { label: 'Keywords',   value: candidate.keyword_score,     color: '#10b981' },
                       ].map(({ label, value, color }) => (
-                        <div key={label} className="score-bar-row">
+                        <div key={`${candidate.id}-${label}`} className="score-bar-row">
                           <span className="score-bar-label">{label}</span>
                           <div className="score-bar-track">
-                            <div
-                              className="score-bar-fill"
-                              style={{ width: `${(value / 25) * 100}%`, background: color }}
-                            />
+                            <div className="score-bar-fill" style={{ width: `${(value / 25) * 100}%`, background: color }} />
                           </div>
                           <span className="score-bar-val">{value}<span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/25</span></span>
                         </div>
@@ -386,8 +407,8 @@ export default function Home() {
                       <div className="skills-section">
                         <div className="skills-label">✅ Matched Skills</div>
                         <div className="skills-chips">
-                          {candidate.matched_skills.map((skill, sIdx) => (
-                            <span key={sIdx} className="chip chip-matched">{skill}</span>
+                          {candidate.matched_skills.map((skill: string) => (
+                            <span key={`match-${candidate.id}-${skill}`} className="chip chip-matched">{skill}</span>
                           ))}
                         </div>
                       </div>
@@ -398,8 +419,8 @@ export default function Home() {
                       <div className="skills-section">
                         <div className="skills-label">⚠️ Missing / Gaps</div>
                         <div className="skills-chips">
-                          {candidate.missing_skills.map((skill, sIdx) => (
-                            <span key={sIdx} className="chip chip-missing">{skill}</span>
+                          {candidate.missing_skills.map((skill: string) => (
+                            <span key={`miss-${candidate.id}-${skill}`} className="chip chip-missing">{skill}</span>
                           ))}
                         </div>
                       </div>
