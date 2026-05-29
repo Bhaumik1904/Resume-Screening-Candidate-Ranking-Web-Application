@@ -1,6 +1,31 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+
+type ToastType = 'error' | 'success' | 'info';
+interface Toast { id: number; message: string; type: ToastType; }
+interface Candidate {
+  id: string;
+  name: string;
+  file_name: string;
+  total_score: number;
+  skills_score: number;
+  experience_score: number;
+  education_score: number;
+  keyword_score: number;
+  matched_skills: string[];
+  missing_skills: string[];
+  summary: string;
+  rank: number;
+}
+interface Results {
+  jobTitle: string;
+  jobId: string;
+  stats: { totalCandidates: number; averageScore: number; topScore: number; qualifiedCandidates: number; };
+  candidates: Candidate[];
+}
+
+let toastCounter = 0;
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'text' | 'url'>('text');
@@ -11,164 +36,177 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
-  const [jobId, setJobId] = useState<number | null>(null);
-  const [results, setResults] = useState<any>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [results, setResults] = useState<Results | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Handlers for drag and drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-  
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-  
+  const showToast = useCallback((message: string, type: ToastType = 'error') => {
+    const id = ++toastCounter;
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+  }, []);
+
+  // ─── Drag and Drop ────────────────────────────────────────────────────────────
+  const handleDragEnter = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
+  const handleDragOver  = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
+      addFiles(Array.from(e.dataTransfer.files));
     }
   };
 
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+  const addFiles = (newFiles: File[]) => {
+    const allowed = ['.pdf', '.doc', '.docx', '.txt'];
+    const valid = newFiles.filter(f => {
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      return allowed.includes(ext);
+    });
+    const rejected = newFiles.length - valid.length;
+    if (rejected > 0) showToast(`${rejected} file(s) rejected. Only PDF, DOCX, and TXT files are supported.`, 'error');
+
+    setFiles(prev => {
+      // Deduplicate by name+size
+      const existing = new Set(prev.map(f => f.name + f.size));
+      const unique = valid.filter(f => !existing.has(f.name + f.size));
+      if (unique.length < valid.length) showToast(`${valid.length - unique.length} duplicate file(s) skipped.`, 'info');
+      return [...prev, ...unique];
+    });
   };
 
+  const removeFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
+
+  // ─── Upload & Analyze ─────────────────────────────────────────────────────────
   const handleUpload = async () => {
-    if (files.length === 0 || (activeTab === 'text' && !jdText) || (activeTab === 'url' && !jdUrl)) return;
-    
+    const jd = activeTab === 'text' ? jdText : jdUrl;
+    if (files.length === 0 || !jd) return;
+
     setIsUploading(true);
     setUploadProgress(10);
-    
+
     const formData = new FormData();
-    if (activeTab === 'text') {
-      formData.append('jobDescription', jdText);
-    } else {
-      // For now, we'll just pass the URL as text, but ideally the backend would scrape it.
-      formData.append('jobDescription', jdUrl);
-    }
-    
-    files.forEach(file => {
-      formData.append('resumes', file);
-    });
+    formData.append('jobDescription', jd);
+    files.forEach(file => formData.append('resumes', file));
 
     try {
       setUploadStatus('Uploading resumes...');
       setUploadProgress(20);
-      const res = await fetch('http://localhost:5000/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      
-      const newJobId = data.jobId;
-      setJobId(newJobId);
-      setUploadProgress(50);
-      
-      // Trigger Analysis
-      setUploadStatus('AI is analyzing candidates...');
-      const analyzeRes = await fetch(`http://localhost:5000/api/analyze/${newJobId}`, {
-        method: 'POST',
-      });
-      
-      if (!analyzeRes.ok) {
-        const analyzeData = await analyzeRes.json();
-        throw new Error(analyzeData.error || 'Analysis failed');
-      }
-      setUploadProgress(80);
+      const uploadRes = await fetch('http://localhost:5000/api/upload', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
 
-      // Fetch Results
-      setUploadStatus('Fetching final results...');
+      const newJobId = uploadData.jobId;
+      setJobId(newJobId);
+      setUploadProgress(45);
+
+      setUploadStatus(`Uploaded ${uploadData.candidatesUploaded} resume(s). AI is analyzing candidates...`);
+      const analyzeRes = await fetch(`http://localhost:5000/api/analyze/${newJobId}`, { method: 'POST' });
+      const analyzeData = await analyzeRes.json();
+      if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Analysis failed');
+
+      if (analyzeData.failed > 0 && analyzeData.scored === 0) {
+        throw new Error(`AI analysis failed for all candidates. ${analyzeData.errors?.[0]?.error || 'Check your Gemini API key.'}`);
+      }
+
+      setUploadProgress(80);
+      setUploadStatus('Fetching ranked results...');
       const resultsRes = await fetch(`http://localhost:5000/api/results/${newJobId}`);
       if (!resultsRes.ok) throw new Error('Failed to fetch results');
-      
+
       const resultsData = await resultsRes.json();
       setResults(resultsData);
       setUploadProgress(100);
+
+      if (analyzeData.failed > 0) {
+        showToast(`${analyzeData.failed} resume(s) failed to analyze and were skipped.`, 'info');
+      }
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      showToast(err.message || 'An unexpected error occurred.', 'error');
     } finally {
       setIsUploading(false);
     }
   };
 
+  const handleReset = () => {
+    setResults(null);
+    setFiles([]);
+    setJobId(null);
+    setJdText('');
+    setJdUrl('');
+    setUploadProgress(0);
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <>
       <nav className="navbar">
         <div className="navbar-brand">
           <div className="navbar-brand-icon">⌘</div>
           Resume Match
-          <span className="navbar-badge">Beta</span>
+          <span className="navbar-badge">AI</span>
         </div>
-        <div>
-          <button className="btn btn-secondary btn-sm">Dashboard</button>
-        </div>
+        {results && (
+          <button className="btn btn-secondary btn-sm" onClick={handleReset}>
+            ← New Analysis
+          </button>
+        )}
       </nav>
 
       <main className="container">
-        <section className="hero">
-          <div className="hero-pill">
-            <span>✨</span> AI-Powered Candidate Screening
-          </div>
-          <h1 className="hero-title">Find the perfect match, faster.</h1>
-          <p className="hero-subtitle">
-            Upload resumes and paste a job description. Our AI analyzes candidate 
-            skills, experience, and fit in seconds, delivering ranked results you can trust.
-          </p>
-        </section>
-
         {!results && !isUploading && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', maxWidth: '900px', margin: '0 auto 60px', padding: '0 24px' }}>
-            <div style={{ textAlign: 'center', padding: '24px' }}>
-              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '14px', fontSize: '24px' }}>📝</div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>1. Provide Job Details</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>Paste your job description or drop a link to the open role.</p>
+          <>
+            <section className="hero">
+              <div className="hero-pill">
+                <span>✨</span> AI-Powered Candidate Screening
+              </div>
+              <h1 className="hero-title">Find the perfect match, faster.</h1>
+              <p className="hero-subtitle">
+                Upload resumes and paste a job description. Our AI analyzes candidate
+                skills, experience, and fit in seconds, delivering ranked results you can trust.
+              </p>
+            </section>
+
+            <div className="how-it-works">
+              <div className="hiw-step">
+                <div className="hiw-icon">📝</div>
+                <h3>1. Provide Job Details</h3>
+                <p>Paste your job description or drop a link to the open role.</p>
+              </div>
+              <div className="hiw-divider">→</div>
+              <div className="hiw-step">
+                <div className="hiw-icon">📄</div>
+                <h3>2. Upload Resumes</h3>
+                <p>Drag and drop candidate resumes in bulk. PDF, DOCX, or TXT.</p>
+              </div>
+              <div className="hiw-divider">→</div>
+              <div className="hiw-step">
+                <div className="hiw-icon">✨</div>
+                <h3>3. AI Ranking</h3>
+                <p>Our AI scores and ranks every candidate by fit instantly.</p>
+              </div>
             </div>
-            <div style={{ textAlign: 'center', padding: '24px' }}>
-              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '14px', fontSize: '24px' }}>📄</div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>2. Upload Resumes</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>Drag and drop candidate resumes securely in bulk.</p>
-            </div>
-            <div style={{ textAlign: 'center', padding: '24px' }}>
-              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '14px', fontSize: '24px' }}>✨</div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>3. AI Candidate Ranking</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>Our AI instantly scores and ranks candidates by fit.</p>
-            </div>
-          </div>
+          </>
         )}
 
         {!results ? (
           <section className="upload-section">
             {/* Job Description Card */}
             <div className="card">
-              <div className="card-label">
-                <span>📝</span> Job Description
-              </div>
-              
+              <div className="card-label"><span>📝</span> Job Description</div>
+
               <div className="jd-tabs">
-                <button 
-                  className={`jd-tab ${activeTab === 'text' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('text')}
-                >
-                  Text
-                </button>
-                <button 
-                  className={`jd-tab ${activeTab === 'url' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('url')}
-                >
-                  URL
-                </button>
+                <button className={`jd-tab ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>Paste Text</button>
+                <button className={`jd-tab ${activeTab === 'url' ? 'active' : ''}`} onClick={() => setActiveTab('url')}>URL</button>
               </div>
 
               {activeTab === 'text' ? (
                 <div>
-                  <textarea 
-                    className="jd-textarea" 
+                  <textarea
+                    className="jd-textarea"
                     placeholder="Paste the job description here..."
                     value={jdText}
                     onChange={(e) => setJdText(e.target.value)}
@@ -177,25 +215,27 @@ export default function Home() {
                 </div>
               ) : (
                 <div>
-                  <input 
-                    type="url" 
-                    className="jd-input" 
+                  <input
+                    type="url"
+                    className="jd-input"
                     placeholder="https://company.com/careers/job-123"
                     value={jdUrl}
                     onChange={(e) => setJdUrl(e.target.value)}
                   />
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    ⚠️ The backend will treat the URL as plain text. For best results, paste the full JD description.
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Resumes Upload Card */}
             <div className="card">
-              <div className="card-label">
-                <span>📄</span> Resumes
-              </div>
+              <div className="card-label"><span>📄</span> Resumes <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— upload up to 20 at once</span></div>
 
-              <div 
+              <div
                 className={`upload-zone ${isDragging ? 'drag-over' : ''}`}
+                onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -203,19 +243,29 @@ export default function Home() {
                 <div className="upload-icon">📁</div>
                 <h3>Drag & drop resumes here</h3>
                 <p>
-                  or <label className="upload-browse-btn">browse files<input type="file" hidden multiple accept=".pdf,.doc,.docx,.txt" onChange={(e) => {
-                    if (e.target.files) {
-                      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-                    }
-                  }} /></label>
+                  or{' '}
+                  <label htmlFor="file-upload" className="upload-browse-btn">browse files</label>
+                  <input
+                    id="file-upload"
+                    type="file"
+                    style={{ display: 'none' }}
+                    multiple
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        addFiles(Array.from(e.target.files));
+                        e.target.value = '';
+                      }
+                    }}
+                  />
                 </p>
-                <p style={{ marginTop: '8px', fontSize: '0.8rem' }}>Supports PDF, DOCX, TXT</p>
+                <p style={{ marginTop: '8px', fontSize: '0.8rem' }}>Supports PDF, DOCX, TXT · Max 10MB each</p>
               </div>
 
               {files.length > 0 && (
                 <div className="file-list">
                   {files.map((file, i) => (
-                    <div key={i} className="file-chip">
+                    <div key={`${file.name}-${file.size}-${i}`} className="file-chip">
                       <span className="file-chip-icon">📄</span>
                       <span className="file-chip-name">{file.name}</span>
                       <span className="file-chip-size">{(file.size / 1024).toFixed(1)} KB</span>
@@ -226,18 +276,18 @@ export default function Home() {
               )}
             </div>
 
-            <button 
-              className="btn btn-primary" 
-              disabled={files.length === 0 || (activeTab === 'text' && !jdText) || (activeTab === 'url' && !jdUrl) || isUploading}
+            <button
+              className="btn btn-primary"
+              disabled={files.length === 0 || (activeTab === 'text' && !jdText.trim()) || (activeTab === 'url' && !jdUrl.trim()) || isUploading}
               onClick={handleUpload}
             >
-              {isUploading ? 'Uploading...' : 'Analyze Candidates 🚀'}
+              Analyze {files.length > 0 ? `${files.length} Candidate${files.length > 1 ? 's' : ''}` : 'Candidates'} 🚀
             </button>
           </section>
         ) : (
           <section className="dashboard">
             <div className="dashboard-header">
-              <h2>Analysis Complete for "{results.jobTitle}"</h2>
+              <h2>Analysis Complete — <em>{results.jobTitle}</em></h2>
               <div className="stats-grid">
                 <div className="stat-card">
                   <div className="stat-value">{results.stats.totalCandidates}</div>
@@ -259,29 +309,38 @@ export default function Home() {
             </div>
 
             <div className="dashboard-controls">
-              <a href={`http://localhost:5000/api/results/${jobId}/export?format=csv`} className="btn btn-secondary btn-sm" download>
-                Export CSV
+              <a
+                href={`http://localhost:5000/api/results/${jobId}/export?format=csv`}
+                className="btn btn-secondary btn-sm"
+                download
+              >
+                ⬇ Export CSV
               </a>
-              <button className="btn btn-secondary btn-sm" onClick={() => {
-                setResults(null);
-                setFiles([]);
-                setJobId(null);
-              }}>
-                Start New Analysis
+              <a
+                href={`http://localhost:5000/api/results/${jobId}/export?format=excel`}
+                className="btn btn-secondary btn-sm"
+                download
+              >
+                ⬇ Export Excel
+              </a>
+              <button className="btn btn-secondary btn-sm" onClick={handleReset}>
+                ＋ New Analysis
               </button>
             </div>
 
             <div className="candidates-grid">
-              {results.candidates.map((candidate: any, idx: number) => {
+              {results.candidates.map((candidate, idx) => {
                 let badgeClass = 'default';
                 if (idx === 0) badgeClass = 'gold';
                 else if (idx === 1) badgeClass = 'silver';
                 else if (idx === 2) badgeClass = 'bronze';
 
+                const scoreColor = candidate.total_score >= 80 ? '#34c759' : candidate.total_score >= 60 ? '#ff9500' : '#ff3b30';
+
                 return (
-                  <div key={candidate.id} className="candidate-card">
+                  <div key={candidate.id} className="candidate-card" style={{ animationDelay: `${idx * 0.07}s` }}>
                     <div className="candidate-card-header">
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                         <div className={`rank-badge ${badgeClass}`}>#{candidate.rank || idx + 1}</div>
                         <div>
                           <div className="candidate-name">{candidate.name}</div>
@@ -292,38 +351,61 @@ export default function Home() {
                         <div className={`score-number ${candidate.total_score >= 80 ? 'high' : candidate.total_score >= 60 ? 'medium' : 'low'}`}>
                           {candidate.total_score}
                         </div>
-                        <div className="score-label">Match Score</div>
+                        <div className="score-label">/ 100</div>
                       </div>
                     </div>
 
+                    {/* Main progress bar */}
                     <div className="main-score-bar">
-                      <div 
-                        className="main-score-fill" 
-                        style={{ 
-                          width: `${candidate.total_score}%`, 
-                          background: candidate.total_score >= 80 ? '#34c759' : candidate.total_score >= 60 ? '#ff9500' : '#ff3b30' 
-                        }} 
-                      />
+                      <div className="main-score-fill" style={{ width: `${candidate.total_score}%`, background: scoreColor }} />
                     </div>
 
-                    <div className="skills-section">
-                      <div className="skills-label">Matched Skills</div>
-                      <div className="skills-chips">
-                        {candidate.matched_skills && candidate.matched_skills.map((skill: string, sIdx: number) => (
-                          <span key={sIdx} className="chip chip-matched">{skill}</span>
-                        ))}
+                    {/* Sub-score breakdown */}
+                    <div className="score-bar-container">
+                      {[
+                        { label: 'Skills',     value: candidate.skills_score,     color: '#6366f1' },
+                        { label: 'Experience', value: candidate.experience_score,  color: '#8b5cf6' },
+                        { label: 'Education',  value: candidate.education_score,   color: '#06b6d4' },
+                        { label: 'Keywords',   value: candidate.keyword_score,     color: '#10b981' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="score-bar-row">
+                          <span className="score-bar-label">{label}</span>
+                          <div className="score-bar-track">
+                            <div
+                              className="score-bar-fill"
+                              style={{ width: `${(value / 25) * 100}%`, background: color }}
+                            />
+                          </div>
+                          <span className="score-bar-val">{value}<span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/25</span></span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Matched Skills */}
+                    {candidate.matched_skills && candidate.matched_skills.length > 0 && (
+                      <div className="skills-section">
+                        <div className="skills-label">✅ Matched Skills</div>
+                        <div className="skills-chips">
+                          {candidate.matched_skills.map((skill, sIdx) => (
+                            <span key={sIdx} className="chip chip-matched">{skill}</span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div className="skills-section">
-                      <div className="skills-label">Missing Skills</div>
-                      <div className="skills-chips">
-                        {candidate.missing_skills && candidate.missing_skills.map((skill: string, sIdx: number) => (
-                          <span key={sIdx} className="chip chip-missing">{skill}</span>
-                        ))}
+                    {/* Missing Skills */}
+                    {candidate.missing_skills && candidate.missing_skills.length > 0 && (
+                      <div className="skills-section">
+                        <div className="skills-label">⚠️ Missing / Gaps</div>
+                        <div className="skills-chips">
+                          {candidate.missing_skills.map((skill, sIdx) => (
+                            <span key={sIdx} className="chip chip-missing">{skill}</span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
+                    {/* AI Summary */}
                     {candidate.summary && (
                       <p className="summary-text">{candidate.summary}</p>
                     )}
@@ -335,6 +417,7 @@ export default function Home() {
         )}
       </main>
 
+      {/* Loading Overlay */}
       {isUploading && (
         <div className="progress-overlay">
           <div className="progress-card">
@@ -343,9 +426,28 @@ export default function Home() {
             <div className="progress-bar-wrap">
               <div className="progress-bar-fill" style={{ width: `${uploadProgress}%` }}></div>
             </div>
+            <p style={{ marginTop: '12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+              This may take 10–30 seconds per resume…
+            </p>
           </div>
         </div>
       )}
+
+      {/* Toast Notifications */}
+      <div className="toast-stack">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast toast-${toast.type}`}>
+            <span className="toast-icon">
+              {toast.type === 'error' ? '❌' : toast.type === 'success' ? '✅' : 'ℹ️'}
+            </span>
+            <span className="toast-msg">{toast.message}</span>
+            <button
+              className="toast-close"
+              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+            >×</button>
+          </div>
+        ))}
+      </div>
     </>
   );
 }
