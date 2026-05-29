@@ -92,8 +92,6 @@ export default function Home() {
     formData.append('jobDescription', jd);
     files.forEach(file => formData.append('resumes', file));
 
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
-
     try {
       setUploadStatus('Uploading resumes...');
       setUploadProgress(20);
@@ -103,48 +101,19 @@ export default function Home() {
 
       const newJobId = uploadData.jobId;
       setJobId(newJobId);
+      setUploadProgress(45);
 
-      const n = uploadData.candidatesUploaded || files.length;
-      setUploadStatus(`Uploaded ${n} resume(s). AI is analyzing candidates...`);
-      setUploadProgress(35);
+      setUploadStatus(`Uploaded ${uploadData.candidatesUploaded} resume(s). AI is analyzing candidates...`);
+      const analyzeRes = await fetch(`http://localhost:5000/api/analyze/${newJobId}`, { method: 'POST' });
+      const analyzeData = await analyzeRes.json();
+      if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Analysis failed');
 
-      // Animate progress bar from 35% → 90% over (n × 14s) seconds
-      const totalMs = n * 14000;
-      const startTime = Date.now();
-      progressTimer = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const pct = 35 + Math.min(55, Math.round((elapsed / totalMs) * 55));
-        setUploadProgress(pct);
-      }, 500);
-
-      // 4-minute timeout — way more than enough for 20 resumes
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4 * 60 * 1000);
-
-      let analyzeData: any;
-      try {
-        const analyzeRes = await fetch(`http://localhost:5000/api/analyze/${newJobId}`, {
-          method: 'POST',
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        analyzeData = await analyzeRes.json();
-        if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Analysis failed');
-      } catch (fetchErr: any) {
-        clearTimeout(timeoutId);
-        if (fetchErr.name === 'AbortError') {
-          // Timed out — fetch results anyway (some may have been scored)
-          showToast('Analysis timed out. Showing partial results.', 'info');
-          analyzeData = { failed: n, scored: 0 };
-        } else {
-          throw fetchErr;
-        }
+      if (analyzeData.failed > 0 && analyzeData.scored === 0) {
+        throw new Error(`AI analysis failed for all candidates. ${analyzeData.errors?.[0]?.error || 'Check your Gemini API key.'}`);
       }
 
-      if (progressTimer) clearInterval(progressTimer);
-      setUploadProgress(90);
+      setUploadProgress(80);
       setUploadStatus('Fetching ranked results...');
-
       const resultsRes = await fetch(`http://localhost:5000/api/results/${newJobId}`);
       if (!resultsRes.ok) throw new Error('Failed to fetch results');
 
@@ -152,18 +121,15 @@ export default function Home() {
       setResults(resultsData);
       setUploadProgress(100);
 
-      if (analyzeData?.failed > 0) {
-        showToast(`${analyzeData.failed} resume(s) could not be analyzed.`, 'info');
+      if (analyzeData.failed > 0) {
+        showToast(`${analyzeData.failed} resume(s) failed to analyze and were skipped.`, 'info');
       }
     } catch (err: any) {
-      if (progressTimer) clearInterval(progressTimer);
       showToast(err.message || 'An unexpected error occurred.', 'error');
     } finally {
-      if (progressTimer) clearInterval(progressTimer);
       setIsUploading(false);
     }
   };
-
 
   const handleReset = () => {
     setResults(null);
@@ -482,8 +448,8 @@ export default function Home() {
               <div className="progress-bar-fill" style={{ width: `${uploadProgress}%` }}></div>
             </div>
             <p style={{ marginTop: '12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Scoring one candidate at a time to respect API limits.<br />
-              Expect ~10s per resume — please don&apos;t close this tab.
+              Analyzing {files.length} resume{files.length > 1 ? 's' : ''} one by one to stay within API limits…
+              <br />Est. wait: ~{Math.ceil(files.length * 8)} seconds
             </p>
           </div>
         </div>
