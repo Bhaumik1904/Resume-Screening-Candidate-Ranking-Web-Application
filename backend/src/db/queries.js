@@ -92,22 +92,22 @@ const updateRanks = async (jobId) => {
 const getResultsByJob = async (jobId) => {
   const res = await db.query(
     `SELECT 
-       c.id AS candidate_id,
+       c.id,
        c.name,
        c.email,
        c.file_name,
        c.file_path,
        c.file_type,
-       COALESCE(s.total_score, 0)      AS total_score,
-       COALESCE(s.skills_score, 0)     AS skills_score,
-       COALESCE(s.experience_score, 0) AS experience_score,
-       COALESCE(s.education_score, 0)  AS education_score,
-       COALESCE(s.keyword_score, 0)    AS keyword_score,
+       COALESCE(s.total_score, 0)       AS total_score,
+       COALESCE(s.skills_score, 0)      AS skills_score,
+       COALESCE(s.experience_score, 0)  AS experience_score,
+       COALESCE(s.education_score, 0)   AS education_score,
+       COALESCE(s.keyword_score, 0)     AS keyword_score,
        COALESCE(s.matched_skills, '{}') AS matched_skills,
        COALESCE(s.missing_skills, '{}') AS missing_skills,
        s.summary,
        s.rank,
-       CASE WHEN s.id IS NULL THEN 'failed' ELSE 'scored' END AS status
+       CASE WHEN s.candidate_id IS NULL THEN 'failed' ELSE 'scored' END AS status
      FROM candidates c
      LEFT JOIN scores s ON s.candidate_id = c.id
      WHERE c.job_id = $1
