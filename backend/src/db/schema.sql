@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS candidates (
 -- Scores table: AI scoring results per candidate
 CREATE TABLE IF NOT EXISTS scores (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  candidate_id UUID NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  candidate_id UUID UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
   job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   total_score INTEGER DEFAULT 0 CHECK (total_score BETWEEN 0 AND 100),
   skills_score INTEGER DEFAULT 0 CHECK (skills_score BETWEEN 0 AND 25),

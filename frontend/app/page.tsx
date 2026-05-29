@@ -1,65 +1,150 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from 'react';
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<'text' | 'url'>('text');
+  const [jdText, setJdText] = useState('');
+  const [jdUrl, setJdUrl] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Handlers for drag and drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <>
+      <nav className="navbar">
+        <div className="navbar-brand">
+          <div className="navbar-brand-icon">⌘</div>
+          Resume Match
+          <span className="navbar-badge">Beta</span>
+        </div>
+        <div>
+          <button className="btn btn-secondary btn-sm">Dashboard</button>
+        </div>
+      </nav>
+
+      <main className="container">
+        <section className="hero">
+          <div className="hero-pill">
+            <span>✨</span> AI-Powered Candidate Screening
+          </div>
+          <h1 className="hero-title">Find the perfect match, faster.</h1>
+          <p className="hero-subtitle">
+            Upload resumes and paste a job description. Our AI analyzes candidate 
+            skills, experience, and fit in seconds, delivering ranked results you can trust.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+        </section>
+
+        <section className="upload-section">
+          {/* Job Description Card */}
+          <div className="card">
+            <div className="card-label">
+              <span>📝</span> Job Description
+            </div>
+            
+            <div className="jd-tabs">
+              <button 
+                className={`jd-tab ${activeTab === 'text' ? 'active' : ''}`}
+                onClick={() => setActiveTab('text')}
+              >
+                Text
+              </button>
+              <button 
+                className={`jd-tab ${activeTab === 'url' ? 'active' : ''}`}
+                onClick={() => setActiveTab('url')}
+              >
+                URL
+              </button>
+            </div>
+
+            {activeTab === 'text' ? (
+              <div>
+                <textarea 
+                  className="jd-textarea" 
+                  placeholder="Paste the job description here..."
+                  value={jdText}
+                  onChange={(e) => setJdText(e.target.value)}
+                />
+                <div className="jd-char-count">{jdText.length} chars</div>
+              </div>
+            ) : (
+              <div>
+                <input 
+                  type="url" 
+                  className="jd-input" 
+                  placeholder="https://company.com/careers/job-123"
+                  value={jdUrl}
+                  onChange={(e) => setJdUrl(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Resumes Upload Card */}
+          <div className="card">
+            <div className="card-label">
+              <span>📄</span> Resumes
+            </div>
+
+            <div 
+              className={`upload-zone ${isDragging ? 'drag-over' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <div className="upload-icon">📁</div>
+              <h3>Drag & drop resumes here</h3>
+              <p>
+                or <label className="upload-browse-btn">browse files<input type="file" hidden multiple accept=".pdf,.doc,.docx,.txt" onChange={(e) => {
+                  if (e.target.files) {
+                    setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                  }
+                }} /></label>
+              </p>
+              <p style={{ marginTop: '8px', fontSize: '0.8rem' }}>Supports PDF, DOCX, TXT</p>
+            </div>
+
+            {files.length > 0 && (
+              <div className="file-list">
+                {files.map((file, i) => (
+                  <div key={i} className="file-chip">
+                    <span className="file-chip-icon">📄</span>
+                    <span className="file-chip-name">{file.name}</span>
+                    <span className="file-chip-size">{(file.size / 1024).toFixed(1)} KB</span>
+                    <button className="file-chip-remove" onClick={() => removeFile(i)}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button className="btn btn-primary" disabled={files.length === 0 || (activeTab === 'text' && !jdText) || (activeTab === 'url' && !jdUrl)}>
+            Analyze Candidates 🚀
+          </button>
+        </section>
       </main>
-    </div>
+    </>
   );
 }
