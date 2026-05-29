@@ -1,0 +1,22 @@
+{
+  "name": "resume-screening-backend",
+  "version": "1.0.0",
+  "description": "Resume Screening & Candidate Ranking API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "db:init": "psql $DATABASE_URL -f src/db/schema.sql"
+  },
+  "keywords": [
+    "resume",
+    "screening",
+    "ai",
+    "hr"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
