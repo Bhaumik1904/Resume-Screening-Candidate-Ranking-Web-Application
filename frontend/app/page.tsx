@@ -122,6 +122,26 @@ export default function Home() {
           </p>
         </section>
 
+        {!results && !isUploading && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', maxWidth: '900px', margin: '0 auto 60px', padding: '0 24px' }}>
+            <div style={{ textAlign: 'center', padding: '24px' }}>
+              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '14px', fontSize: '24px' }}>📝</div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>1. Provide Job Details</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>Paste your job description or drop a link to the open role.</p>
+            </div>
+            <div style={{ textAlign: 'center', padding: '24px' }}>
+              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '14px', fontSize: '24px' }}>📄</div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>2. Upload Resumes</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>Drag and drop candidate resumes securely in bulk.</p>
+            </div>
+            <div style={{ textAlign: 'center', padding: '24px' }}>
+              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '14px', fontSize: '24px' }}>✨</div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>3. AI Candidate Ranking</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>Our AI instantly scores and ranks candidates by fit.</p>
+            </div>
+          </div>
+        )}
+
         {!results ? (
           <section className="upload-section">
             {/* Job Description Card */}

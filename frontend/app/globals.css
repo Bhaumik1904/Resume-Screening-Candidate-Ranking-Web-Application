@@ -47,7 +47,10 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  background-image: none;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(0, 113, 227, 0.08) 0px, transparent 40%),
+    radial-gradient(at 100% 100%, rgba(0, 113, 227, 0.05) 0px, transparent 40%);
+  background-attachment: fixed;
 }
 
 /* ─── Typography ────────────────────────────────────────────────────────────── */
@@ -68,9 +71,9 @@ p  { color: var(--text-secondary); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 40px;
+  padding: 16px 40px;
   border-bottom: 1px solid var(--border);
-  background: rgba(10, 10, 15, 0.8);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px);
   position: sticky;
   top: 0;
@@ -97,14 +100,15 @@ p  { color: var(--text-secondary); }
   align-items: center;
   justify-content: center;
   font-size: 18px;
+  color: white;
 }
 
 .navbar-badge {
   font-size: 0.7rem;
   font-weight: 700;
   background: var(--accent-glow);
-  color: var(--accent-light);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--accent);
+  border: 1px solid rgba(0, 113, 227, 0.2);
   padding: 3px 10px;
   border-radius: 20px;
   letter-spacing: 0.05em;
@@ -121,9 +125,9 @@ p  { color: var(--text-secondary); }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  color: var(--accent-light);
+  background: var(--accent-glow);
+  border: 1px solid rgba(0, 113, 227, 0.2);
+  color: var(--accent);
   padding: 6px 16px;
   border-radius: 30px;
   font-size: 0.82rem;
