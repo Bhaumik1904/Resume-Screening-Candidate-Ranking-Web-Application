@@ -268,7 +268,13 @@ export default function Home() {
                           setScrapedJdText(data.description);
                           showToast(`✅ Fetched: "${data.title}"`, 'success');
                         } catch (err: any) {
-                          showToast(err.message, 'error');
+                          // Auto-switch to paste tab so user can copy-paste manually
+                          setActiveTab('text');
+                          showToast(
+                            (err.message || 'Could not fetch the URL.') +
+                            ' Switching to paste mode — copy the job description from your browser and paste it here.',
+                            'error'
+                          );
                         } finally {
                           setIsScraping(false);
                         }
