@@ -1,6 +1,7 @@
 const express = require('express');
 const { getJobById, getCandidatesByJob, upsertScore, updateRanks } = require('../db/queries');
 const { scoreResume } = require('../services/aiScorer');
+const { extractText, extractCandidateName } = require('../services/fileParser');
 
 const router = express.Router();
 
@@ -59,19 +60,37 @@ router.post('/:jobId', async (req, res) => {
     for (let i = 0; i < candidates.length; i++) {
       const candidate = candidates[i];
 
-      if (!candidate.raw_text || candidate.raw_text.trim().length < 50) {
-        console.error(`[Analyze] Skipping "${candidate.name}" — text too short (${candidate.raw_text?.trim().length ?? 0} chars).`);
+      // If this candidate has no raw_text (image-based PDF deferred from upload),
+      // run Vision OCR now before scoring.
+      let rawText = candidate.raw_text || '';
+      if (rawText.trim().length < 50 && candidate.file_path) {
+        try {
+          console.log(`[Analyze] No text for "${candidate.name}" — running Vision OCR...`);
+          rawText = await extractText(candidate.file_path, 'application/pdf');
+          // Update candidate name if it was 'Unknown Candidate'
+          if (candidate.name === 'Unknown Candidate' && rawText.length > 0) {
+            candidate.name = extractCandidateName(rawText);
+          }
+        } catch (ocrErr) {
+          console.error(`[Analyze] Vision OCR failed for "${candidate.name}": ${ocrErr.message}`);
+        }
+      }
+
+      if (!rawText || rawText.trim().length < 50) {
+        console.error(`[Analyze] Skipping "${candidate.name}" — text too short (${rawText.trim().length} chars).`);
         errors.push({
           candidateId: candidate.id,
           name: candidate.name,
           error: 'Resume text could not be extracted. Please re-upload as a text-based PDF or DOCX.',
         });
+        // Still wait before next to keep rate limit spacing
+        if (i < candidates.length - 1) await sleep(6000);
         continue;
       }
 
       try {
         console.log(`[Analyze] (${i + 1}/${candidates.length}) Scoring: ${candidate.name}`);
-        const scoreData = await scoreCandidateWithRetry(candidate, job.description);
+        const scoreData = await scoreCandidateWithRetry({ ...candidate, raw_text: rawText }, job.description);
 
         // Prefer AI-extracted name over the heuristic "Unknown Candidate"
         const resolvedName =

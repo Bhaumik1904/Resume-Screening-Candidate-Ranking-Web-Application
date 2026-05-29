@@ -45,16 +45,22 @@ const upload = multer({
 
 // ─── POST /api/upload ─────────────────────────────────────────────────────────
 // Accepts: multipart/form-data with:
-//   - resumes: File[] (PDF/DOC/DOCX)
+//   - resumes: File[] (PDF/DOC/DOCX/TXT)
 //   - jobTitle: string (optional)
 //   - jobDescription: string (JD text)
 //   - jdFile: File (optional, instead of jobDescription text)
+//
+// Strategy: Store ALL candidates immediately with whatever text we can extract
+// synchronously (pdf-parse for text-based PDFs, full text for DOCX/TXT).
+// Image-based PDFs that return no text are stored with raw_text = '' and
+// will be OCR-processed by Gemini Vision during the analyze step instead.
+// This prevents upload failures caused by Gemini Vision rate limits.
 router.post('/', upload.fields([{ name: 'resumes', maxCount: 20 }, { name: 'jdFile', maxCount: 1 }]),
   async (req, res) => {
     try {
       const { jobTitle, jobDescription } = req.body;
       const resumeFiles = req.files?.resumes || [];
-      const jdFiles = req.files?.jdFile || [];
+      const jdFiles    = req.files?.jdFile   || [];
 
       // Resolve JD text from text field or uploaded file
       let jdText = jobDescription || '';
@@ -73,41 +79,49 @@ router.post('/', upload.fields([{ name: 'resumes', maxCount: 20 }, { name: 'jdFi
       // Create the job record
       const job = await createJob(jobTitle || 'Untitled Position', jdText.trim());
 
-      // Parse and store each resume
       const candidateRecords = [];
-      const errors = [];
 
       for (const file of resumeFiles) {
+        // Try fast text extraction (pdf-parse / mammoth / fs.readFile).
+        // Skip Gemini Vision here — it will be called during the analyze step
+        // where we have proper rate-limit handling (sequential + retry).
+        let rawText = '';
+        let name    = 'Unknown Candidate';
+
         try {
-          const rawText = await extractText(file.path, file.mimetype);
-          const name = extractCandidateName(rawText);
-
-          const candidate = await createCandidate({
-            jobId: job.id,
-            name,
-            email: null,
-            fileName: file.originalname,
-            filePath: file.path,
-            fileType: path.extname(file.originalname).toLowerCase().replace('.', ''),
-            rawText,
-          });
-
-          candidateRecords.push({
-            candidateId: candidate.id,
-            name: candidate.name,
-            fileName: file.originalname,
-          });
+          rawText = await extractTextFast(file.path, file.mimetype);
+          name    = extractCandidateName(rawText);
         } catch (parseErr) {
-          errors.push({ file: file.originalname, error: parseErr.message });
+          // Image-based PDF — stored with empty raw_text, Vision OCR deferred to analyze
+          console.warn(`[Upload] Could not extract text from "${file.originalname}" synchronously. Will use Vision OCR during analysis.`);
         }
+
+        // Always create the candidate record regardless of whether text was extracted
+        const candidate = await createCandidate({
+          jobId:    job.id,
+          name,
+          email:    null,
+          fileName: file.originalname,
+          filePath: file.path,
+          fileType: path.extname(file.originalname).toLowerCase().replace('.', ''),
+          rawText,
+        });
+
+        candidateRecords.push({
+          candidateId: candidate.id,
+          name:        candidate.name,
+          fileName:    file.originalname,
+          hasText:     rawText.length > 50,
+        });
+
+        console.log(`[Upload] Stored "${file.originalname}" → candidate ${candidate.id} (${rawText.length} chars)`);
       }
 
       res.status(201).json({
-        jobId: job.id,
-        jobTitle: job.title,
-        candidatesUploaded: candidateRecords.length,
-        candidates: candidateRecords,
-        errors: errors.length > 0 ? errors : undefined,
+        jobId:               job.id,
+        jobTitle:            job.title,
+        candidatesUploaded:  candidateRecords.length,
+        candidates:          candidateRecords,
         message: `Successfully uploaded ${candidateRecords.length} resume(s). Ready to analyze.`,
       });
     } catch (err) {
@@ -118,3 +132,42 @@ router.post('/', upload.fields([{ name: 'resumes', maxCount: 20 }, { name: 'jdFi
 );
 
 module.exports = router;
+
+
+// ─── Fast (non-Gemini) text extraction ────────────────────────────────────────
+// Only uses pdf-parse, mammoth, and fs — no API calls, never throws on image PDFs.
+const pdfParse = require('pdf-parse');
+const mammoth  = require('mammoth');
+const MIN_TEXT = 100; // chars below this = image-based PDF, skip
+
+const extractTextFast = async (filePath, mimeType) => {
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (ext === '.txt' || mimeType === 'text/plain') {
+    return fs.readFileSync(filePath, 'utf-8').replace(/\s\s+/g, ' ').trim();
+  }
+
+  if (
+    ext === '.docx' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    ext === '.doc'  ||
+    mimeType === 'application/msword'
+  ) {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return (result.value || '').replace(/\s\s+/g, ' ').trim();
+  }
+
+  if (ext === '.pdf' || mimeType === 'application/pdf') {
+    const buf  = fs.readFileSync(filePath);
+    const data = await pdfParse(buf);
+    const text = (data.text || '').trim();
+
+    if (text.length < MIN_TEXT) {
+      // Image-based PDF — signal to the caller to defer Vision OCR to analyze step
+      throw new Error('image-based PDF');
+    }
+    return text.replace(/\s\s+/g, ' ').trim();
+  }
+
+  throw new Error(`Unsupported file type: ${ext}`);
+};
