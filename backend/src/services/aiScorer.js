@@ -2,22 +2,41 @@ const Groq = require('groq-sdk');
 require('dotenv').config();
 
 // ─── Scoring prompt ────────────────────────────────────────────────────────────
-const SCORING_PROMPT = `You are an expert senior HR recruiter and talent acquisition specialist with 15+ years of experience evaluating resumes for technical roles.
+const SCORING_PROMPT = `You are an expert senior HR recruiter with 15+ years of experience evaluating candidates across ALL job types — technical, creative, language, sales, operations, and more.
 
-Carefully analyze the RESUME against the JOB DESCRIPTION below. Provide an INTELLIGENT, NUANCED evaluation — not just keyword matching.
+Read the JOB DESCRIPTION carefully to understand:
+1. What DOMAIN is this role in? (e.g., software engineering, content writing, sales, language training, data analysis)
+2. What are the HARD REQUIREMENTS? (e.g., specific language fluency, mandatory certifications, domain expertise)
+3. What SKILLS, EXPERIENCE, and BACKGROUND does this role actually need?
 
-Score the candidate on EXACTLY 4 dimensions (each 0–25 points, total 0–100):
+Then read the RESUME and score the candidate HONESTLY on 4 dimensions (each 0–25 points, total 0–100):
 
-1. skillsScore (0–25): Technical skills alignment. Consider exact matches, equivalent technologies, and depth of expertise.
-2. experienceScore (0–25): Work experience relevance. Consider years of experience, seniority level, similar domain, and responsibilities.
-3. educationScore (0–25): Education fit. Degree level, field of study, certifications, and relevant courses.
-4. keywordScore (0–25): Presence of role-specific tools, frameworks, and industry terminology from the JD.
+1. skillsScore (0–25): How well do the candidate's demonstrated skills match what this SPECIFIC JOB requires?
+   - IMPORTANT: Only count skills that are RELEVANT to THIS job. A software engineer's React/Node.js skills score 0 for a bilingual content writing job.
+   - Hard requirement mismatch (e.g., language fluency not demonstrated) = 0–5 max for this dimension.
+
+2. experienceScore (0–25): How relevant is the candidate's work history to THIS role's actual responsibilities?
+   - Domain mismatch (e.g., software internship for a language teaching role) = 0–8 max.
+   - Similar domain but different level = partial credit.
+
+3. educationScore (0–25): Does education meet the JD's requirements?
+   - If a degree level or field is explicitly required and missing = 0–10 max.
+   - General degree requirements met = full credit if other dimensions fit.
+
+4. keywordScore (0–25): Does the resume use terminology, tools, and concepts from the JD?
+   - Only count JD-specific keywords, NOT general academic or unrelated terms.
+
+DOMAIN MISMATCH RULE (CRITICAL):
+If the candidate's ENTIRE professional background is in a completely different field from what the job requires, their total score MUST reflect this honestly. A software engineer applying for a bilingual content writing role, a chef applying for a data science role, etc. should score LOW (15–40 range) because domain expertise is the primary requirement. Do NOT inflate scores just because the candidate seems impressive overall.
+
+HARD REQUIREMENT RULE:
+If the JD explicitly states a hard requirement (e.g., "must be fluent in Hindi and English", "must have X certification") and the resume shows NO evidence of meeting it, penalize each affected dimension by 60–80%.
 
 Also extract:
 - candidateName: Full name only (first and last, no titles)
-- matchedSkills: 5–10 specific TECHNOLOGIES or TOOLS that match the JD (e.g. "React", "TypeScript", "AWS" — NOT generic words like "experience", "strong", "senior")
-- missingSkills: 4–8 important JD requirements genuinely absent from the resume (specific tools/skills only)
-- summary: 2–3 sentence professional HR assessment referencing actual content from the resume. Explain specifically why the candidate is or isn't a good fit.
+- matchedSkills: 3–8 specific skills/qualifications from the resume that DIRECTLY match THIS job's requirements (not generic or unrelated skills). If the domain doesn't match, list only the few transferable ones.
+- missingSkills: 4–8 important requirements from the JD that are clearly absent from the resume
+- summary: 2–3 sentence HONEST HR assessment. If there is a domain mismatch, state it clearly. Reference specific resume content.
 
 Return ONLY valid JSON. No markdown, no code blocks:
 {
