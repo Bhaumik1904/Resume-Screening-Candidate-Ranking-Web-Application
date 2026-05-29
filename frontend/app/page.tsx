@@ -28,6 +28,8 @@ interface Results {
 let toastCounter = 0;
 
 export default function Home() {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  
   const [activeTab, setActiveTab] = useState<'text' | 'url' | 'file'>('text');
   const [jobTitle, setJobTitle] = useState('');
   const [jdText, setJdText] = useState('');
@@ -92,7 +94,7 @@ export default function Home() {
     try {
       const fd = new FormData();
       fd.append('jdFile', file);
-      const res = await fetch('http://localhost:5000/api/parse-jd', { method: 'POST', body: fd });
+      const res = await fetch(`${API_URL}/api/parse-jd`, { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to parse file');
       setJdFileText(data.text);
@@ -116,7 +118,7 @@ export default function Home() {
     if (activeTab === 'url' && jdUrl.trim() && !scrapedJdText) {
       setIsScraping(true);
       try {
-        const scrapeRes = await fetch('http://localhost:5000/api/scrape-url', {
+        const scrapeRes = await fetch(`${API_URL}/api/scrape-url`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: jdUrl.trim() }),
@@ -149,7 +151,7 @@ export default function Home() {
     try {
       setUploadStatus('Uploading resumes...');
       setUploadProgress(20);
-      const uploadRes = await fetch('http://localhost:5000/api/upload', { method: 'POST', body: formData });
+      const uploadRes = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: formData });
       const uploadData = await uploadRes.json();
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
 
@@ -158,7 +160,7 @@ export default function Home() {
       setUploadProgress(45);
 
       setUploadStatus(`Uploaded ${uploadData.candidatesUploaded} resume(s). AI is analyzing candidates...`);
-      const analyzeRes = await fetch(`http://localhost:5000/api/analyze/${newJobId}`, { method: 'POST' });
+      const analyzeRes = await fetch(`${API_URL}/api/analyze/${newJobId}`, { method: 'POST' });
       const analyzeData = await analyzeRes.json();
       if (!analyzeRes.ok) throw new Error(analyzeData.error || 'Analysis failed');
 
@@ -168,7 +170,7 @@ export default function Home() {
 
       setUploadProgress(80);
       setUploadStatus('Fetching ranked results...');
-      const resultsRes = await fetch(`http://localhost:5000/api/results/${newJobId}`);
+      const resultsRes = await fetch(`${API_URL}/api/results/${newJobId}`);
       if (!resultsRes.ok) throw new Error('Failed to fetch results');
 
       const resultsData = await resultsRes.json();
@@ -362,7 +364,7 @@ export default function Home() {
                         if (!jdUrl.trim()) return;
                         setIsScraping(true);
                         try {
-                          const res = await fetch('http://localhost:5000/api/scrape-url', {
+                          const res = await fetch(`${API_URL}/api/scrape-url`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ url: jdUrl.trim() }),
@@ -500,14 +502,14 @@ export default function Home() {
 
             <div className="dashboard-controls">
               <a
-                href={`http://localhost:5000/api/results/${jobId}/export?format=csv`}
+                href={`${API_URL}/api/results/${jobId}/export?format=csv`}
                 className="btn btn-secondary btn-sm"
                 download
               >
                 ⬇ Export CSV
               </a>
               <a
-                href={`http://localhost:5000/api/results/${jobId}/export?format=excel`}
+                href={`${API_URL}/api/results/${jobId}/export?format=excel`}
                 className="btn btn-secondary btn-sm"
                 download
               >
