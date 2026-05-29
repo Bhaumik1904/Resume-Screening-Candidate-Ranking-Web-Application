@@ -298,9 +298,17 @@ export default function Home() {
                       />
                     </div>
                   ) : (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '10px' }}>
-                      Paste a link from Indeed, LinkedIn, Glassdoor, or any job board and click <strong>Fetch JD</strong>.
-                    </p>
+                    <div style={{ marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                      <p style={{ marginBottom: '6px' }}>
+                        <strong>Works with:</strong> company career pages, job boards without login
+                      </p>
+                      <p style={{ color: 'var(--warning)', marginBottom: '6px' }}>
+                        ⚠️ <strong>Indeed, LinkedIn & Glassdoor block automated access.</strong>
+                      </p>
+                      <p>
+                        For those sites, open the job page → select all text → copy → switch to <strong>Paste Text</strong> tab → paste.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
