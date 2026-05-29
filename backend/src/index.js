@@ -3,9 +3,10 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const uploadRouter = require('./routes/upload');
-const analyzeRouter = require('./routes/analyze');
-const resultsRouter = require('./routes/results');
+const uploadRouter   = require('./routes/upload');
+const analyzeRouter  = require('./routes/analyze');
+const resultsRouter  = require('./routes/results');
+const scrapeRouter   = require('./routes/scrapeUrl');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -29,9 +30,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
-app.use('/api/upload', uploadRouter);
-app.use('/api/analyze', analyzeRouter);
-app.use('/api/results', resultsRouter);
+app.use('/api/upload',     uploadRouter);
+app.use('/api/analyze',    analyzeRouter);
+app.use('/api/results',    resultsRouter);
+app.use('/api/scrape-url', scrapeRouter);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
@@ -42,7 +44,8 @@ app.get('/api/health', async (req, res) => {
       status: 'ok',
       timestamp: new Date().toISOString(),
       database: 'connected',
-      gemini: process.env.GEMINI_API_KEY ? 'configured' : 'missing',
+      groq:     process.env.GROQ_API_KEY ? 'configured' : 'missing',
+      gemini:   process.env.GEMINI_API_KEY ? 'configured' : 'missing',
     });
   } catch (err) {
     res.status(503).json({
@@ -84,8 +87,9 @@ app.listen(PORT, () => {
   console.log(`   Health:  GET  http://localhost:${PORT}/api/health`);
   console.log(`   Upload:  POST http://localhost:${PORT}/api/upload`);
   console.log(`   Analyze: POST http://localhost:${PORT}/api/analyze/:jobId`);
-  console.log(`   Results: GET  http://localhost:${PORT}/api/results/:jobId`);
-  console.log(`   Export:  GET  http://localhost:${PORT}/api/results/:jobId/export?format=csv|excel\n`);
+  console.log(`   Results:   GET  http://localhost:${PORT}/api/results/:jobId`);
+  console.log(`   Export:    GET  http://localhost:${PORT}/api/results/:jobId/export?format=csv|excel`);
+  console.log(`   Scrape:    POST http://localhost:${PORT}/api/scrape-url\n`);
 });
 
 module.exports = app;

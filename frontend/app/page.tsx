@@ -34,6 +34,8 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapedJdText, setScrapedJdText] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
@@ -82,8 +84,33 @@ export default function Home() {
 
   // ─── Upload & Analyze ─────────────────────────────────────────────────────────
   const handleUpload = async () => {
-    const jd = activeTab === 'text' ? jdText : jdUrl;
-    if (files.length === 0 || !jd) return;
+    let jd = activeTab === 'text' ? jdText : (scrapedJdText || jdUrl);
+
+    // If URL tab is active and we haven't scraped yet, scrape first
+    if (activeTab === 'url' && jdUrl.trim() && !scrapedJdText) {
+      setIsScraping(true);
+      try {
+        const scrapeRes = await fetch('http://localhost:5000/api/scrape-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: jdUrl.trim() }),
+        });
+        const scrapeData = await scrapeRes.json();
+        if (!scrapeRes.ok) throw new Error(scrapeData.error || 'Failed to fetch job URL');
+        setScrapedJdText(scrapeData.description);
+        jd = scrapeData.description;
+        showToast(`Job description fetched: "${scrapeData.title}"`, 'success');
+      } catch (err: any) {
+        showToast(`Could not fetch URL: ${err.message}. Please paste the job description text instead.`, 'error');
+        setActiveTab('text');
+        setIsScraping(false);
+        return;
+      } finally {
+        setIsScraping(false);
+      }
+    }
+
+    if (files.length === 0 || !jd?.trim()) return;
 
     setIsUploading(true);
     setUploadProgress(10);
@@ -137,6 +164,7 @@ export default function Home() {
     setJobId(null);
     setJdText('');
     setJdUrl('');
+    setScrapedJdText('');
     setUploadProgress(0);
   };
 
@@ -215,16 +243,59 @@ export default function Home() {
                 </div>
               ) : (
                 <div>
-                  <input
-                    type="url"
-                    className="jd-input"
-                    placeholder="https://company.com/careers/job-123"
-                    value={jdUrl}
-                    onChange={(e) => setJdUrl(e.target.value)}
-                  />
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                    ⚠️ The backend will treat the URL as plain text. For best results, paste the full JD description.
-                  </p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <input
+                      type="url"
+                      className="jd-input"
+                      placeholder="https://in.indeed.com/viewjob?jk=..."
+                      value={jdUrl}
+                      onChange={(e) => { setJdUrl(e.target.value); setScrapedJdText(''); }}
+                      style={{ flex: 1, marginBottom: 0 }}
+                    />
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={async () => {
+                        if (!jdUrl.trim()) return;
+                        setIsScraping(true);
+                        try {
+                          const res = await fetch('http://localhost:5000/api/scrape-url', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: jdUrl.trim() }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error);
+                          setScrapedJdText(data.description);
+                          showToast(`✅ Fetched: "${data.title}"`, 'success');
+                        } catch (err: any) {
+                          showToast(err.message, 'error');
+                        } finally {
+                          setIsScraping(false);
+                        }
+                      }}
+                      disabled={isScraping || !jdUrl.trim()}
+                      style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      {isScraping ? '⏳ Fetching...' : '🔗 Fetch JD'}
+                    </button>
+                  </div>
+                  {scrapedJdText ? (
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 600, marginBottom: '6px' }}>
+                        ✅ Job description fetched ({scrapedJdText.length} chars) — ready to analyze
+                      </div>
+                      <textarea
+                        className="jd-textarea"
+                        value={scrapedJdText}
+                        onChange={(e) => setScrapedJdText(e.target.value)}
+                        style={{ minHeight: '140px' }}
+                      />
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '10px' }}>
+                      Paste a link from Indeed, LinkedIn, Glassdoor, or any job board and click <strong>Fetch JD</strong>.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
