@@ -70,10 +70,12 @@ router.post('/:jobId', async (req, res) => {
         if (result.status === 'fulfilled') {
           results.push(result.value);
         } else {
+          const errMsg = result.reason?.message || 'Scoring failed';
+          console.error(`[Analyze] Failed to score candidate ${batch[idx].name}: ${errMsg}`);
           errors.push({
             candidateId: batch[idx].id,
             name: batch[idx].name,
-            error: result.reason?.message || 'Scoring failed',
+            error: errMsg,
           });
         }
       });

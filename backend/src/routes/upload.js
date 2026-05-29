@@ -25,14 +25,15 @@ const fileFilter = (_req, file, cb) => {
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
   ];
-  const allowedExt = ['.pdf', '.doc', '.docx'];
+  const allowedExt = ['.pdf', '.doc', '.docx', '.txt'];
   const ext = path.extname(file.originalname).toLowerCase();
 
   if (allowed.includes(file.mimetype) || allowedExt.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error(`Unsupported file type: ${ext}. Only PDF, DOC, DOCX allowed.`), false);
+    cb(new Error(`Unsupported file type: ${ext}. Only PDF, DOC, DOCX, TXT allowed.`), false);
   }
 };
 
