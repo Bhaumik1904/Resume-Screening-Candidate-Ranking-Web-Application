@@ -36,3 +36,6 @@ yarn-error.log*
 # Uploaded files
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# Sample / test files
+sample-resumes/
