@@ -8,6 +8,9 @@ export default function Home() {
   const [jdUrl, setJdUrl] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [jobId, setJobId] = useState<number | null>(null);
 
   // Handlers for drag and drop
   const handleDragOver = (e: React.DragEvent) => {
@@ -30,6 +33,46 @@ export default function Home() {
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpload = async () => {
+    if (files.length === 0 || (activeTab === 'text' && !jdText) || (activeTab === 'url' && !jdUrl)) return;
+    
+    setIsUploading(true);
+    setUploadProgress(10);
+    
+    const formData = new FormData();
+    if (activeTab === 'text') {
+      formData.append('jobDescription', jdText);
+    } else {
+      // For now, we'll just pass the URL as text, but ideally the backend would scrape it.
+      formData.append('jobDescription', jdUrl);
+    }
+    
+    files.forEach(file => {
+      formData.append('resumes', file);
+    });
+
+    try {
+      setUploadProgress(40);
+      const res = await fetch('http://localhost:5000/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      setUploadProgress(80);
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      
+      setJobId(data.jobId);
+      setUploadProgress(100);
+      alert(`Upload success! Job ID: ${data.jobId}`);
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -140,11 +183,27 @@ export default function Home() {
             )}
           </div>
 
-          <button className="btn btn-primary" disabled={files.length === 0 || (activeTab === 'text' && !jdText) || (activeTab === 'url' && !jdUrl)}>
-            Analyze Candidates 🚀
+          <button 
+            className="btn btn-primary" 
+            disabled={files.length === 0 || (activeTab === 'text' && !jdText) || (activeTab === 'url' && !jdUrl) || isUploading}
+            onClick={handleUpload}
+          >
+            {isUploading ? 'Uploading...' : 'Analyze Candidates 🚀'}
           </button>
         </section>
       </main>
+
+      {isUploading && (
+        <div className="progress-overlay">
+          <div className="progress-card">
+            <div className="progress-spinner"></div>
+            <h3>Uploading Resumes</h3>
+            <div className="progress-bar-wrap">
+              <div className="progress-bar-fill" style={{ width: `${uploadProgress}%` }}></div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
