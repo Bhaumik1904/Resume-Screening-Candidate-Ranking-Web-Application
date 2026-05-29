@@ -28,9 +28,12 @@ interface Results {
 let toastCounter = 0;
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'text' | 'url'>('text');
+  const [activeTab, setActiveTab] = useState<'text' | 'url' | 'file'>('text');
   const [jdText, setJdText] = useState('');
   const [jdUrl, setJdUrl] = useState('');
+  const [jdFile, setJdFile] = useState<File | null>(null);
+  const [jdFileText, setJdFileText] = useState('');
+  const [isParsingJd, setIsParsingJd] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -82,9 +85,31 @@ export default function Home() {
 
   const removeFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
 
+  // ─── Parse uploaded JD file ───────────────────────────────────────────────────
+  const parseJdFile = async (file: File) => {
+    setIsParsingJd(true);
+    try {
+      const fd = new FormData();
+      fd.append('jdFile', file);
+      const res = await fetch('http://localhost:5000/api/parse-jd', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to parse file');
+      setJdFileText(data.text);
+      showToast(`✅ JD extracted from "${file.name}" (${data.chars} chars)`, 'success');
+    } catch (err: any) {
+      showToast(err.message, 'error');
+      setJdFile(null);
+    } finally {
+      setIsParsingJd(false);
+    }
+  };
+
   // ─── Upload & Analyze ─────────────────────────────────────────────────────────
   const handleUpload = async () => {
-    let jd = activeTab === 'text' ? jdText : (scrapedJdText || jdUrl);
+    let jd =
+      activeTab === 'text' ? jdText
+      : activeTab === 'file' ? jdFileText
+      : (scrapedJdText || jdUrl);
 
     // If URL tab is active and we haven't scraped yet, scrape first
     if (activeTab === 'url' && jdUrl.trim() && !scrapedJdText) {
@@ -164,6 +189,8 @@ export default function Home() {
     setJobId(null);
     setJdText('');
     setJdUrl('');
+    setJdFile(null);
+    setJdFileText('');
     setScrapedJdText('');
     setUploadProgress(0);
   };
@@ -228,7 +255,8 @@ export default function Home() {
 
               <div className="jd-tabs">
                 <button className={`jd-tab ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>Paste Text</button>
-                <button className={`jd-tab ${activeTab === 'url' ? 'active' : ''}`} onClick={() => setActiveTab('url')}>URL</button>
+                <button className={`jd-tab ${activeTab === 'url'  ? 'active' : ''}`} onClick={() => setActiveTab('url')}>URL</button>
+                <button className={`jd-tab ${activeTab === 'file' ? 'active' : ''}`} onClick={() => setActiveTab('file')}>📎 Upload File</button>
               </div>
 
               {activeTab === 'text' ? (
@@ -241,6 +269,69 @@ export default function Home() {
                   />
                   <div className="jd-char-count">{jdText.length} chars</div>
                 </div>
+
+              ) : activeTab === 'file' ? (
+                <div>
+                  {/* Drop zone for JD file */}
+                  <label
+                    className={`jd-file-drop${jdFile ? ' jd-file-drop--has-file' : ''}`}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      const dropped = e.dataTransfer.files[0];
+                      if (dropped) { setJdFile(dropped); setJdFileText(''); await parseJdFile(dropped); }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      accept=".pdf,.docx,.doc,.txt"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (f) { setJdFile(f); setJdFileText(''); await parseJdFile(f); }
+                        e.target.value = '';
+                      }}
+                    />
+                    {isParsingJd ? (
+                      <div className="jd-file-parsing">
+                        <div className="spinner" style={{ width: 28, height: 28, margin: '0 auto 10px' }} />
+                        <p>Reading document...</p>
+                      </div>
+                    ) : jdFile && jdFileText ? (
+                      <div className="jd-file-info">
+                        <span className="jd-file-icon">📄</span>
+                        <div>
+                          <div className="jd-file-name">{jdFile.name}</div>
+                          <div className="jd-file-meta" style={{ color: 'var(--success)' }}>✅ {jdFileText.length} chars extracted</div>
+                        </div>
+                        <button
+                          className="jd-file-remove"
+                          onClick={(e) => { e.preventDefault(); setJdFile(null); setJdFileText(''); }}
+                        >✕</button>
+                      </div>
+                    ) : (
+                      <div className="jd-file-empty">
+                        <span style={{ fontSize: '2rem' }}>📎</span>
+                        <p style={{ margin: '8px 0 4px', fontWeight: 600 }}>Drop JD file here or click to browse</p>
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>PDF, DOCX, TXT · Max 10MB</p>
+                      </div>
+                    )}
+                  </label>
+
+                  {/* Preview of extracted text */}
+                  {jdFileText && (
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Preview (editable):</div>
+                      <textarea
+                        className="jd-textarea"
+                        value={jdFileText}
+                        onChange={(e) => setJdFileText(e.target.value)}
+                        style={{ minHeight: '130px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
               ) : (
                 <div>
                   <div style={{ display: 'flex', gap: '10px' }}>

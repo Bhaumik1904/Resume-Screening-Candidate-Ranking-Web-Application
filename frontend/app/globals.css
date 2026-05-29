@@ -840,6 +840,50 @@ p  { color: var(--text-secondary); }
 .btn-secondary:hover:not(:disabled) { background: var(--bg-tertiary); border-color: var(--border-hover); }
 .btn-sm { padding: 8px 14px; font-size: 0.8rem; }
 
+/* ─── JD File Upload Drop Zone ──────────────────────────────────────────────── */
+.jd-file-drop {
+  display: block;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+  background: var(--bg-secondary);
+}
+.jd-file-drop:hover { border-color: var(--accent); background: var(--accent-glow); }
+.jd-file-drop--has-file { border-style: solid; border-color: var(--success); background: rgba(16,185,129,0.04); }
+
+.jd-file-empty { color: var(--text-muted); }
+.jd-file-parsing { color: var(--text-muted); padding: 8px 0; }
+
+.jd-file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.jd-file-icon { font-size: 1.8rem; flex-shrink: 0; }
+.jd-file-name { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); word-break: break-word; }
+.jd-file-meta { font-size: 0.75rem; margin-top: 3px; }
+.jd-file-remove {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.jd-file-remove:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+
 @keyframes spin          { to { transform: rotate(360deg) } }
 
 @keyframes progressAnim  { 0% { transform: translateX(-100%) } 100% { transform: translateX(400%) } }

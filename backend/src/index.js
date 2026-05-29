@@ -7,6 +7,7 @@ const uploadRouter   = require('./routes/upload');
 const analyzeRouter  = require('./routes/analyze');
 const resultsRouter  = require('./routes/results');
 const scrapeRouter   = require('./routes/scrapeUrl');
+const parseJdRouter  = require('./routes/parseJd');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,6 +35,7 @@ app.use('/api/upload',     uploadRouter);
 app.use('/api/analyze',    analyzeRouter);
 app.use('/api/results',    resultsRouter);
 app.use('/api/scrape-url', scrapeRouter);
+app.use('/api/parse-jd',   parseJdRouter);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
