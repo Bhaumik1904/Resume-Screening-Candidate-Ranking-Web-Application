@@ -13,28 +13,23 @@ const extractText = async (filePath, mimeType) => {
   const ext = path.extname(filePath).toLowerCase();
 
   try {
+    let rawText = '';
     if (ext === '.pdf' || mimeType === 'application/pdf') {
-      return await parsePDF(filePath);
-    }
-
-    if (
+      rawText = await parsePDF(filePath);
+    } else if (
       ext === '.docx' ||
-      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      ext === '.doc' || mimeType === 'application/msword'
     ) {
-      return await parseDOCX(filePath);
+      rawText = await parseDOCX(filePath);
+    } else if (ext === '.txt' || mimeType === 'text/plain') {
+      rawText = fs.readFileSync(filePath, 'utf-8');
+    } else {
+      throw new Error(`Unsupported file type: ${ext}`);
     }
 
-    if (ext === '.doc' || mimeType === 'application/msword') {
-      // mammoth handles .doc too (with limited fidelity)
-      return await parseDOCX(filePath);
-    }
-
-    // Plain text fallback
-    if (ext === '.txt' || mimeType === 'text/plain') {
-      return fs.readFileSync(filePath, 'utf-8');
-    }
-
-    throw new Error(`Unsupported file type: ${ext}`);
+    // Normalize whitespace (remove multiple empty lines and spaces) to help AI analysis
+    return rawText.replace(/\s\s+/g, ' ').trim();
   } catch (err) {
     console.error(`[FileParser] Failed to parse ${filePath}:`, err.message);
     throw new Error(`Could not extract text from file: ${err.message}`);
