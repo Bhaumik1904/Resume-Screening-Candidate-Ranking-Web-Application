@@ -84,14 +84,16 @@ app.use((req, res) => {
 });
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🚀 Resume Screening API running on http://localhost:${PORT}`);
-  console.log(`   Health:  GET  http://localhost:${PORT}/api/health`);
-  console.log(`   Upload:  POST http://localhost:${PORT}/api/upload`);
-  console.log(`   Analyze: POST http://localhost:${PORT}/api/analyze/:jobId`);
-  console.log(`   Results:   GET  http://localhost:${PORT}/api/results/:jobId`);
-  console.log(`   Export:    GET  http://localhost:${PORT}/api/results/:jobId/export?format=csv|excel`);
-  console.log(`   Scrape:    POST http://localhost:${PORT}/api/scrape-url\n`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Resume Screening API running on http://localhost:${PORT}`);
+    console.log(`   Health:  GET  http://localhost:${PORT}/api/health`);
+    console.log(`   Upload:  POST http://localhost:${PORT}/api/upload`);
+    console.log(`   Analyze: POST http://localhost:${PORT}/api/analyze/:jobId`);
+    console.log(`   Results:   GET  http://localhost:${PORT}/api/results/:jobId`);
+    console.log(`   Export:    GET  http://localhost:${PORT}/api/results/:jobId/export?format=csv|excel`);
+    console.log(`   Scrape:    POST http://localhost:${PORT}/api/scrape-url\n`);
+  });
+}
 
 module.exports = app;
