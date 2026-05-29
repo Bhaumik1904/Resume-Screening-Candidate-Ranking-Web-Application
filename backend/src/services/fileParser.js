@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const pdfParse = require('pdf-parse');
+// Use the internal lib path to avoid pdf-parse running test code at import time
+// which fails in serverless environments (Vercel) because test PDFs aren't bundled
+const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 const mammoth = require('mammoth');
 
 // Minimum chars to consider a PDF as text-based
