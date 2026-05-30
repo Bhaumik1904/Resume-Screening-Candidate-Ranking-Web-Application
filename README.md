@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/banner.png" alt="Resume Match Banner" width="100%"/>
+  <img src="banner.png" alt="Resume Match Banner" width="100%"/>
 </p>
 
 <h1 align="center">Resume Match — AI-Powered Candidate Ranking</h1>
@@ -39,33 +39,6 @@
 | **2. Upload Resumes** | Drag & drop up to 20 PDFs, DOCX or TXT files at once |
 | **3. AI Ranking** | Groq (Llama 3.3 70B) scores every candidate across 4 dimensions |
 | **4. Export** | Download ranked results as a formatted Excel or CSV report |
-
----
-
-## 📸 Screenshots
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="docs/screenshots/landing.png" alt="Landing Page" width="480"/>
-      <br/><sub><b>Landing Page</b></sub>
-    </td>
-    <td align="center">
-      <img src="docs/screenshots/upload.png" alt="Upload Form" width="480"/>
-      <br/><sub><b>Upload Form — JD + Resumes</b></sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="docs/screenshots/results.png" alt="Results Page" width="480"/>
-      <br/><sub><b>AI-Ranked Results with Score Breakdown</b></sub>
-    </td>
-    <td align="center">
-      <img src="docs/screenshots/export.png" alt="Excel Export" width="480"/>
-      <br/><sub><b>Excel Export with Color-Coded Scores</b></sub>
-    </td>
-  </tr>
-</table>
 
 ---
 
